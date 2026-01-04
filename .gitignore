@@ -4,14 +4,20 @@ __pycache__/
 *.log
 .DS_Store
 
-# Gemnini Agent Context
+# Gemini Agent Context
 GEMINI.md
 FUTURO.md
 
-# Project Specific
+# Project Specific Assets (Local Only)
 output/
+assets/broll/
 assets/*.mp4
+assets/*.mp3
+assets/*.wav
 scripts/*.txt
+*.mp3
+*.srt
+*.vtt
 
 # Sensitive / Configuration
 .wakatime-project
