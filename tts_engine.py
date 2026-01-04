@@ -2,22 +2,37 @@ import asyncio
 import edge_tts
 import os
 
-async def generate_audio(text, output_file, voice="pt-BR-AntonioNeural"):
+async def generate_audio_and_subs(text, output_audio, output_subs, voice="pt-BR-AntonioNeural"):
     """
-    Gera um arquivo de áudio a partir do texto usando Microsoft Edge TTS.
-    Vozes sugeridas:
-    - pt-BR-AntonioNeural (Masculina, séria)
-    - pt-BR-FranciscaNeural (Feminina, suave)
+    Gera áudio e SRT em um único stream (o jeito mais eficiente e correto).
     """
     communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(output_file)
+    submaker = edge_tts.SubMaker()
+    
+    with open(output_audio, "wb") as f:
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                f.write(chunk["data"])
+            elif chunk["type"] == "WordBoundary":
+                submaker.feed(chunk)
+
+    srt_content = submaker.get_srt()
+    if srt_content:
+        with open(output_subs, "w", encoding="utf-8") as f:
+            f.write(srt_content)
+        return True
+    return False
 
 if __name__ == "__main__":
-    # Teste rápido se rodado diretamente
-    text = "Este é um teste de áudio do sistema Homes Engine Absolute Cinema."
-    output = "output/test_audio.mp3"
+    text = "Agora o SRT vai funcionar perfeitamente com um único stream."
+    audio = "output/teste.mp3"
+    subs = "output/teste.srt"
     try:
-        asyncio.run(generate_audio(text, output))
-        print(f"✅ Áudio gerado com sucesso: {output}")
+        if asyncio.run(generate_audio_and_subs(text, audio, subs)):
+            print(f"✅ Sucesso!")
+            with open(subs, "r") as f:
+                print(f"--- SRT ---\n{f.read()}")
+        else:
+            print("❌ Falha na geração.")
     except Exception as e:
-        print(f"❌ Erro ao gerar áudio: {e}")
+        print(f"❌ Erro fatal: {e}")
