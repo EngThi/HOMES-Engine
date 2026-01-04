@@ -1,0 +1,19 @@
+# System & Logs
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+
+# Gemnini Agent Context
+GEMINI.md
+FUTURO.md
+
+# Project Specific
+output/
+assets/*.mp4
+scripts/*.txt
+
+# Sensitive / Configuration
+.wakatime-project
+.wakatime.cfg
+.env
