@@ -12,10 +12,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Configurações Globais
-ASSETS_DIR = "assets"
+PROJECT_ROOT = os.getcwd() # Assume que rodamos da raiz
+ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
 BROLL_DIR = os.path.join(ASSETS_DIR, "broll")
-OUTPUT_DIR = "output"
-SCRIPTS_DIR = "scripts"
+AUDIO_ASSETS_DIR = os.path.join(ASSETS_DIR, "audio")
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
+RENDER_DIR = os.path.join(OUTPUT_DIR, "renders")
+CACHE_DIR = os.path.join(OUTPUT_DIR, "cache")
+SCRIPTS_DIR = os.path.join(PROJECT_ROOT, "scripts")
 FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "Montserrat-ExtraBold.ttf")
 
 # Temas Visuais (v1.4)
@@ -27,6 +31,10 @@ THEMES = {
     "yellow_punch": (
         "Alignment=2,BorderStyle=1,Outline=2,Shadow=0,"
         "MarginV=40,Fontname=Montserrat ExtraBold,FontSize=20,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000"
+    ),
+    "cyan_future": (
+        "Alignment=2,BorderStyle=1,Outline=2,Shadow=0,"
+        "MarginV=40,Fontname=Montserrat ExtraBold,FontSize=20,PrimaryColour=&H00FFFF00,OutlineColour=&H00000000"
     ),
     "minimal_box": (
         "Alignment=2,BorderStyle=3,Outline=0,Shadow=0,"
@@ -67,14 +75,18 @@ def shift_vtt_timestamps(vtt_path, offset_seconds):
 def create_dirs():
     os.makedirs(ASSETS_DIR, exist_ok=True)
     os.makedirs(BROLL_DIR, exist_ok=True)
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(AUDIO_ASSETS_DIR, exist_ok=True)
+    os.makedirs(RENDER_DIR, exist_ok=True)
+    os.makedirs(CACHE_DIR, exist_ok=True)
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
 
 def find_background_music():
+    if not os.path.exists(AUDIO_ASSETS_DIR):
+        return None
     for ext in ['mp3', 'wav']:
-        for file in os.listdir(ASSETS_DIR):
+        for file in os.listdir(AUDIO_ASSETS_DIR):
             if file.lower().endswith(f".{ext}"):
-                return os.path.join(ASSETS_DIR, file)
+                return os.path.join(AUDIO_ASSETS_DIR, file)
     return None
 
 def get_dynamic_broll_sequence(target_duration, clip_duration=3.0):
@@ -82,6 +94,9 @@ def get_dynamic_broll_sequence(target_duration, clip_duration=3.0):
     Seleciona múltiplos clipes aleatórios para cobrir a duração total.
     Retorna lista de caminhos absolutos.
     """
+    if not os.path.exists(BROLL_DIR):
+        return []
+        
     files = [os.path.join(BROLL_DIR, f) for f in os.listdir(BROLL_DIR) if f.lower().endswith('.mp4')]
     
     if not files:
@@ -98,7 +113,7 @@ def get_dynamic_broll_sequence(target_duration, clip_duration=3.0):
         
     return sequence
 
-def generate_video(script_path):
+def generate_video(script_path, theme_name="yellow_punch"):
     """
     v1.4: Dynamic B-Roll (Cortes Rápidos) + Music Ducking + Themes
     """
@@ -107,9 +122,9 @@ def generate_video(script_path):
     script_name = os.path.basename(script_path).replace(".txt", "")
     
     output_filename = f"HOMES_v1.4_{timestamp}.mp4"
-    output_file = os.path.join(OUTPUT_DIR, output_filename)
-    audio_file = os.path.join(OUTPUT_DIR, f"{script_name}_audio.mp3")
-    subs_file = os.path.join(OUTPUT_DIR, f"{script_name}_subs.vtt")
+    output_file = os.path.join(RENDER_DIR, output_filename)
+    audio_file = os.path.join(CACHE_DIR, f"{script_name}_audio.mp3")
+    subs_file = os.path.join(CACHE_DIR, f"{script_name}_subs.vtt")
     
     # 1. Gerar Áudio e Legenda
     try:
@@ -147,10 +162,11 @@ def generate_video(script_path):
         # Adiciona clipes de vídeo aos inputs
         for i, clip in enumerate(broll_clips):
             inputs.extend(["-i", clip])
-            # Escala e Corta para 720x1280 (9:16) e trima duração
+            # Efeito Ken Burns (Zoom Dinâmico) + Escala
+            # O zoompan faz um leve zoom de 1.0 para 1.1 ao longo da duração
             filter_complex += (
-                f"[{i}:v]scale=720:1280:force_original_aspect_ratio=increase,"
-                f"crop=720:1280,trim=duration={clip_duration},setpts=PTS-STARTPTS[v{i}];"
+                f"[{i}:v]scale=1280:2276,zoompan=z='min(zoom+0.001,1.1)':d={int(clip_duration*30)}:s=720x1280:fps=30,"
+                f"trim=duration={clip_duration},setpts=PTS-STARTPTS[v{i}];"
             )
         
         # Concatena os streams de vídeo processados
@@ -159,7 +175,14 @@ def generate_video(script_path):
         
         # Loop se necessário (segurança) e Legendas
         ffmpeg_subs = subs_file.replace(":", "\\:")
-        selected_theme = THEMES["yellow_punch"] # Padrão v1.4
+        
+        # Seleção de Tema (Safe Get)
+        if theme_name not in THEMES:
+            logger.warning(f"⚠️ Tema '{theme_name}' não encontrado. Usando 'yellow_punch'.")
+            theme_name = "yellow_punch"
+            
+        selected_theme = THEMES[theme_name]
+        logger.info(f"🎨 Tema Visual: {theme_name}")
         
         filter_complex += (
             f"[v_base]loop=-1:size=32767:start=0[v_looped];"
@@ -176,9 +199,9 @@ def generate_video(script_path):
             inputs.extend(["-stream_loop", "-1", "-i", music_path])
             
             filter_complex += (
-                f";[{narration_input_index}:a]adelay={int(intro_delay*1000)}|{int(intro_delay*1000)},volume=1.5,asplit[narr1][narr2];"
-                f"[{music_input_index}:a]volume=0.3[bgm];"
-                f"[bgm][narr2]sidechaincompress=threshold=0.03:ratio=20:attack=5:release=800[bgm_ducked];"
+                f";[{narration_input_index}:a]adelay={int(intro_delay*1000)}|{int(intro_delay*1000)},volume=1.8,asplit[narr1][narr2];"
+                f"[{music_input_index}:a]volume=0.4[bgm];"
+                f"[bgm][narr2]sidechaincompress=threshold=0.01:ratio=30:attack=2:release=1000[bgm_ducked];"
                 f"[narr1][bgm_ducked]amix=inputs=2:duration=first[a_out]"
             )
         else:
@@ -187,12 +210,12 @@ def generate_video(script_path):
             )
 
         # 5. Comando Final
-        logger.info(f"🎬 Renderizando v1.4...")
+        logger.info(f"🎬 Renderizando v1.4 (HQ Mode)...")
         cmd = ["ffmpeg"] + inputs + [
             "-filter_complex", filter_complex,
             "-map", "[v_out]", "-map", "[a_out]",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", # CRF maior para rapidez no teste
-            "-c:a", "aac", "-b:a", "128k",
+            "-c:v", "libx264", "-preset", "superfast", "-crf", "23", "-r", "30",
+            "-c:a", "aac", "-b:a", "192k",
             "-t", str(video_duration),
             output_file, "-y"
         ]
@@ -215,7 +238,10 @@ def generate_video(script_path):
         # print(cmd)
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        generate_video(sys.argv[1])
-    else:
-        print("Uso: python video_maker.py <script>")
+    import argparse
+    parser = argparse.ArgumentParser(description="HOMES Engine v1.4 - Video Maker")
+    parser.add_argument("script", help="Caminho para o arquivo de roteiro (.txt)")
+    parser.add_argument("--theme", default="yellow_punch", help="Tema visual (default, yellow_punch, cyan_future, minimal_box)")
+    
+    args = parser.parse_args()
+    generate_video(args.script, args.theme)
