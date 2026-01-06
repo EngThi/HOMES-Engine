@@ -1,28 +1,18 @@
-import os
 import requests
 import json
 import logging
+from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_MAX_TOKENS, GEMINI_TEMPERATURE
 
 # Configuração de Logs
 logger = logging.getLogger(__name__)
 
-def load_api_key():
-    try:
-        with open(".secrets", "r") as f:
-            for line in f:
-                if line.startswith("GEMINI_API_KEY="):
-                    return line.strip().split("=")[1]
-    except FileNotFoundError:
-        return None
-    return None
-
 def generate_script_from_topic(topic):
-    api_key = load_api_key()
-    if not api_key or "COLE_SUA_CHAVE" in api_key:
-        logger.error("❌ Chave da API Gemini não encontrada ou inválida em .secrets")
+    api_key = GEMINI_API_KEY
+    if not api_key or "sua_chave" in api_key:
+        logger.error("❌ Chave da API Gemini não encontrada ou inválida em config/env")
         return None
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={api_key}"
     
     prompt = f"""
     [ROLE]

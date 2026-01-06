@@ -5,6 +5,10 @@ import time
 from datetime import datetime
 from core.video_maker import generate_video
 from core.ai_writer import generate_script_from_topic
+from config import (
+    validate_config, THEMES, SCRIPTS_DIR, OUTPUT_DIR,
+    GEMINI_API_KEY, get_theme, get_output_path
+)
 
 # Cores para o Terminal
 GREEN = "\033[92m"
@@ -62,6 +66,10 @@ def main_menu():
     return choice
 
 def main():
+    # Validar config no início
+    if not validate_config():
+        input("Pressione Enter para continuar mesmo assim...")
+
     while True:
         choice = main_menu()
         

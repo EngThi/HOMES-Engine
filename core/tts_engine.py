@@ -1,6 +1,10 @@
 import asyncio
 import edge_tts
 import os
+from config import (
+    TTS_LANGUAGE, TTS_GENDER, AUDIO_SAMPLE_RATE,
+    GOOGLE_CLOUD_TTS_API_KEY
+)
 
 async def generate_audio_and_subs(text, output_audio, output_subs, voice="pt-BR-AntonioNeural"):
     """

@@ -6,23 +6,24 @@ import random
 import re
 import math
 from datetime import datetime
+from config import (
+    VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS,
+    AUDIO_SAMPLE_RATE, get_theme, OUTPUT_DIR,
+    ASSETS_DIR, SCRIPTS_DIR
+)
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Configurações Globais
-PROJECT_ROOT = os.getcwd() # Assume que rodamos da raiz
-ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
+# Configurações Globais (vinda da config)
 BROLL_DIR = os.path.join(ASSETS_DIR, "broll")
 AUDIO_ASSETS_DIR = os.path.join(ASSETS_DIR, "audio")
-OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
 RENDER_DIR = os.path.join(OUTPUT_DIR, "renders")
 CACHE_DIR = os.path.join(OUTPUT_DIR, "cache")
-SCRIPTS_DIR = os.path.join(PROJECT_ROOT, "scripts")
 FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "Montserrat-ExtraBold.ttf")
 
-# Temas Visuais (v1.4)
+# Temas Visuais (v1.4) - Mantidos para FFmpeg force_style
 THEMES = {
     "default": (
         "Alignment=2,BorderStyle=3,Outline=1,Shadow=0,"
@@ -165,7 +166,7 @@ def generate_video(script_path, theme_name="yellow_punch"):
             # Efeito Ken Burns (Zoom Dinâmico) + Escala
             # O zoompan faz um leve zoom de 1.0 para 1.1 ao longo da duração
             filter_complex += (
-                f"[{i}:v]scale=1280:2276,zoompan=z='min(zoom+0.001,1.1)':d={int(clip_duration*30)}:s=720x1280:fps=30,"
+                f"[{i}:v]scale=1280:2276,zoompan=z='min(zoom+0.001,1.1)':d={int(clip_duration*VIDEO_FPS)}:s=720x1280:fps={VIDEO_FPS},"
                 f"trim=duration={clip_duration},setpts=PTS-STARTPTS[v{i}];"
             )
         
@@ -214,7 +215,7 @@ def generate_video(script_path, theme_name="yellow_punch"):
         cmd = ["ffmpeg"] + inputs + [
             "-filter_complex", filter_complex,
             "-map", "[v_out]", "-map", "[a_out]",
-            "-c:v", "libx264", "-preset", "superfast", "-crf", "23", "-r", "30",
+            "-c:v", "libx264", "-preset", "superfast", "-crf", "23", "-r", str(VIDEO_FPS),
             "-c:a", "aac", "-b:a", "192k",
             "-t", str(video_duration),
             output_file, "-y"

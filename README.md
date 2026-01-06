@@ -1,6 +1,28 @@
-# 🤖 HOMES-Engine
+# 🎥 HOMES Engine - Absolute Cinema Creator
 
-O **HOMES-Engine** é o núcleo de processamento do ecossistema HOMES, projetado para automação total de criação de conteúdo audiovisual via dispositivos móveis.
+## 🚀 Quick Start
+
+### Termux (Automático)
+```bash
+bash setup.sh
+```
+
+### Manual
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+nano .env  # Adicionar GEMINI_API_KEY
+python main.py
+```
+
+### Primeiro uso:
+1. Digite ou fale um roteiro
+2. Escolha tema
+3. Vídeo renderizado em `output/`
+
+---
+
+## 🛠️ O que é o HOMES Engine?
 
 ## ✨ Diferenciais Técnicos
 - **Custo Zero:** Operação baseada em APIs gratuitas e ambientes mobile (Termux).
