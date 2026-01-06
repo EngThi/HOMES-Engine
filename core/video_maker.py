@@ -44,6 +44,9 @@ THEMES = {
 }
 
 def get_audio_duration(audio_path):
+    """
+    Obtém a duração de um arquivo de áudio em segundos usando ffprobe.
+    """
     try:
         result = subprocess.check_output(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", audio_path]
@@ -53,7 +56,10 @@ def get_audio_duration(audio_path):
         return 10.0
 
 def shift_vtt_timestamps(vtt_path, offset_seconds):
-    """Adiciona um atraso aos tempos do arquivo VTT para sincronizar com o áudio atrasado."""
+    """
+    Ajusta os timestamps de um arquivo VTT por um deslocamento de segundos.
+    Útil para sincronizar legendas com atrasos propositais no início do áudio.
+    """
     def shift_match(match):
         h, m, s, ms = map(float, match.groups())
         total_seconds = h * 3600 + m * 60 + s + ms / 1000 + offset_seconds

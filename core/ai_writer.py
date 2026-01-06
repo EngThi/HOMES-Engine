@@ -7,6 +7,15 @@ from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_MAX_TOKENS, GEMINI_TEMPE
 logger = logging.getLogger(__name__)
 
 def generate_script_from_topic(topic):
+    """
+    Gera um roteiro otimizado para vídeos curtos usando a API do Gemini.
+    
+    Args:
+        topic (str): O tema ou assunto do vídeo.
+        
+    Returns:
+        str: O texto do roteiro gerado ou None em caso de erro.
+    """
     api_key = GEMINI_API_KEY
     if not api_key or "sua_chave" in api_key:
         logger.error("❌ Chave da API Gemini não encontrada ou inválida em config/env")
