@@ -6,9 +6,9 @@ from config import (
     GOOGLE_CLOUD_TTS_API_KEY
 )
 
-async def generate_audio_and_subs(text, output_audio, output_subs, voice="pt-BR-AntonioNeural"):
+async def generate_audio_and_subs(text: str, output_audio: str, output_subs: str, voice: str = "pt-BR-AntonioNeural") -> bool:
     """
-    Gera áudio e SRT em um único stream (o jeito mais eficiente e correto).
+    Gera áudio e SRT em um único stream.
     """
     communicate = edge_tts.Communicate(text, voice)
     submaker = edge_tts.SubMaker()

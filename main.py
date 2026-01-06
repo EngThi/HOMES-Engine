@@ -22,9 +22,10 @@ def clear_screen():
 
 def print_banner():
     clear_screen()
-    print(f"{CYAN}╔════════════════════════════════════════╗{RESET}")
-    print(f"{CYAN}║      🎥 HOMES ENGINE v2.1 (BRAIN)      ║{RESET}")
-    print(f"{CYAN}╚════════════════════════════════════════╝{RESET}")
+    print(f"{CYAN}🎬 HOMES ENGINE | ABSOLUTE CINEMA v3.0 PRE-RELEASE{RESET}")
+    print(f"{CYAN}─────────────────────────────────────────────────{RESET}")
+    print(f"{GREEN}STATUS: ONLINE{RESET} | {YELLOW}IA BRAIN: READY{RESET}")
+    print(f"{CYAN}─────────────────────────────────────────────────{RESET}")
 
 def run_command(command):
     try:

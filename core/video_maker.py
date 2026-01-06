@@ -12,6 +12,8 @@ from config import (
     ASSETS_DIR, SCRIPTS_DIR
 )
 
+from typing import List, Optional
+
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -24,7 +26,7 @@ CACHE_DIR = os.path.join(OUTPUT_DIR, "cache")
 FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "Montserrat-ExtraBold.ttf")
 
 # Temas Visuais (v1.4) - Mantidos para FFmpeg force_style
-THEMES = {
+THEMES_STYLE = {
     "default": (
         "Alignment=2,BorderStyle=3,Outline=1,Shadow=0,"
         "MarginV=40,Fontname=Montserrat ExtraBold,FontSize=18,PrimaryColour=&H00FFFFFF"
@@ -43,7 +45,7 @@ THEMES = {
     )
 }
 
-def get_audio_duration(audio_path):
+def get_audio_duration(audio_path: str) -> float:
     """
     Obtém a duração de um arquivo de áudio em segundos usando ffprobe.
     """
@@ -55,7 +57,7 @@ def get_audio_duration(audio_path):
     except:
         return 10.0
 
-def shift_vtt_timestamps(vtt_path, offset_seconds):
+def shift_vtt_timestamps(vtt_path: str, offset_seconds: float) -> None:
     """
     Ajusta os timestamps de um arquivo VTT por um deslocamento de segundos.
     Útil para sincronizar legendas com atrasos propositais no início do áudio.
@@ -96,7 +98,7 @@ def find_background_music():
                 return os.path.join(AUDIO_ASSETS_DIR, file)
     return None
 
-def get_dynamic_broll_sequence(target_duration, clip_duration=3.0):
+def get_dynamic_broll_sequence(target_duration: float, clip_duration: float = 3.0) -> List[str]:
     """
     Seleciona múltiplos clipes aleatórios para cobrir a duração total.
     Retorna lista de caminhos absolutos.
@@ -184,11 +186,11 @@ def generate_video(script_path, theme_name="yellow_punch"):
         ffmpeg_subs = subs_file.replace(":", "\\:")
         
         # Seleção de Tema (Safe Get)
-        if theme_name not in THEMES:
+        if theme_name not in THEMES_STYLE:
             logger.warning(f"⚠️ Tema '{theme_name}' não encontrado. Usando 'yellow_punch'.")
             theme_name = "yellow_punch"
             
-        selected_theme = THEMES[theme_name]
+        selected_theme = THEMES_STYLE[theme_name]
         logger.info(f"🎨 Tema Visual: {theme_name}")
         
         filter_complex += (
