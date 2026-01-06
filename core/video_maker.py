@@ -13,6 +13,7 @@ from config import (
     ASSETS_DIR, SCRIPTS_DIR
 )
 from core.ffmpeg_engine import FFmpegEngine
+from core.color_utils import rgb_to_ass_hex
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -25,23 +26,29 @@ RENDER_DIR = os.path.join(OUTPUT_DIR, "renders")
 CACHE_DIR = os.path.join(OUTPUT_DIR, "cache")
 FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "Montserrat-ExtraBold.ttf")
 
-# Temas Visuais (v1.4) - Mantidos para FFmpeg force_style
+# Cores Base (RGB)
+COLOR_WHITE = (255, 255, 255)
+COLOR_YELLOW = (255, 255, 0)
+COLOR_CYAN = (0, 255, 255)
+COLOR_BLACK_TRANSPARENT = (0, 0, 0) # Alpha controlado separadamente
+
+# Temas Visuais (v1.5 - Powered by color_utils)
 THEMES_STYLE = {
     "default": (
-        "Alignment=2,BorderStyle=3,Outline=1,Shadow=0,"
-        "MarginV=40,Fontname=Montserrat ExtraBold,FontSize=18,PrimaryColour=&H00FFFFFF"
+        f"Alignment=2,BorderStyle=3,Outline=1,Shadow=0,"
+        f"MarginV=40,Fontname=Montserrat ExtraBold,FontSize=18,PrimaryColour={rgb_to_ass_hex(COLOR_WHITE)}"
     ),
     "yellow_punch": (
-        "Alignment=2,BorderStyle=1,Outline=2,Shadow=0,"
-        "MarginV=40,Fontname=Montserrat ExtraBold,FontSize=20,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000"
+        f"Alignment=2,BorderStyle=1,Outline=2,Shadow=0,"
+        f"MarginV=40,Fontname=Montserrat ExtraBold,FontSize=20,PrimaryColour={rgb_to_ass_hex(COLOR_YELLOW)},OutlineColour=&H00000000"
     ),
     "cyan_future": (
-        "Alignment=2,BorderStyle=1,Outline=2,Shadow=0,"
-        "MarginV=40,Fontname=Montserrat ExtraBold,FontSize=20,PrimaryColour=&H00FFFF00,OutlineColour=&H00000000"
+        f"Alignment=2,BorderStyle=1,Outline=2,Shadow=0,"
+        f"MarginV=40,Fontname=Montserrat ExtraBold,FontSize=20,PrimaryColour={rgb_to_ass_hex(COLOR_CYAN)},OutlineColour=&H00000000"
     ),
     "minimal_box": (
-        "Alignment=2,BorderStyle=3,Outline=0,Shadow=0,"
-        "MarginV=50,Fontname=Montserrat ExtraBold,FontSize=16,PrimaryColour=&H00FFFFFF,BackColour=&H80000000"
+        f"Alignment=2,BorderStyle=3,Outline=0,Shadow=0,"
+        f"MarginV=50,Fontname=Montserrat ExtraBold,FontSize=16,PrimaryColour={rgb_to_ass_hex(COLOR_WHITE)},BackColour={rgb_to_ass_hex(COLOR_BLACK_TRANSPARENT, alpha=128)}"
     )
 }
 
@@ -197,10 +204,14 @@ def generate_video(script_path, theme_name="yellow_punch"):
             music_input_index = len(broll_clips) + 1
             inputs.extend(["-stream_loop", "-1", "-i", music_path])
             
+            # CONFIGURAÇÃO DE ÁUDIO (SIDECHAIN COMPRESSION)
+            # 1. adelay: Atraso no início da narração para dar tempo da música começar
+            # 2. volume=1.8: Aumenta o volume da voz (Narrador) para destaque
+            # 3. volume=0.3: Volume base da música de fundo (Reduzido de 0.4 para 0.3 para mais clareza)
             filter_complex += (
                 f";[{narration_input_index}:a]adelay={int(intro_delay*1000)}|{int(intro_delay*1000)},volume=1.8,asplit[narr1][narr2];"
-                f"[{music_input_index}:a]volume=0.4[bgm];"
-                f"[bgm][narr2]sidechaincompress=threshold=0.01:ratio=30:attack=2:release=1000[bgm_ducked];"
+                f"[{music_input_index}:a]volume=0.3[bgm];"
+                f"[bgm][narr2]sidechaincompress=threshold=0.01:ratio=20:attack=5:release=800[bgm_ducked];"
                 f"[narr1][bgm_ducked]amix=inputs=2:duration=first[a_out]"
             )
         else:
