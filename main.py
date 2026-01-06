@@ -9,6 +9,17 @@ from config import (
     validate_config, THEMES, SCRIPTS_DIR, OUTPUT_DIR,
     GEMINI_API_KEY, get_theme, get_output_path
 )
+from core.error_handler import (
+    get_logger,
+    ErrorContext,
+    retry,
+    with_error_context,
+    ErrorHandler
+)
+from core.queue_handler import QueueHandler
+
+# Configuração de Logger Profissional
+logger = get_logger(__name__)
 
 # Cores para o Terminal
 GREEN = "\033[92m"
@@ -67,112 +78,145 @@ def main_menu():
     return choice
 
 def main():
-    # Validar config no início
-    if not validate_config():
-        input("Pressione Enter para continuar mesmo assim...")
+    with ErrorContext("HOMES-Engine Main Pipeline"):
+        # Inicializar Gerenciador de Fila
+        queue = QueueHandler(
+            n8n_webhook_url=os.getenv("N8N_WEBHOOK_URL")
+        )
+        logger.info("🚀 Sistema inicializado com ErrorContext e QueueHandler")
 
-    while True:
-        choice = main_menu()
-        
-        script_content = ""
-        script_path = ""
-        
-        if choice == '0':
-            print("Saindo...")
-            sys.exit()
+        # Validar config no início
+        if not validate_config():
+            logger.warning("Configuração incompleta detectada.")
+            input("Pressione Enter para continuar mesmo assim...")
 
-        elif choice == '1':
-            # Modo Voz
-            print(f"\n{CYAN}💡 Dica: Fale o roteiro COMPLETO, como se estivesse narrando.{RESET}")
-            script_content = get_voice_input()
-            if not script_content:
-                input("Pressione Enter para tentar novamente...")
-                continue
+        while True:
+            choice = main_menu()
+            
+            script_content = ""
+            script_path = ""
+            
+            if choice == '0':
+                logger.info("Encerrando sistema...")
+                sys.exit()
 
-        elif choice == '2':
-            # Modo Texto
-            print(f"\n{CYAN}📝 Digite seu roteiro (Pressione Enter 2x para finalizar):{RESET}")
-            lines = []
-            while True:
-                line = input()
-                if line:
-                    lines.append(line)
-                else:
-                    break
-            script_content = "\n".join(lines)
+            elif choice == '1':
+                # Modo Voz
+                logger.info("Iniciando captura de voz")
+                print(f"\n{CYAN}💡 Dica: Fale o roteiro COMPLETO, como se estivesse narrando.{RESET}")
+                script_content = get_voice_input()
+                if not script_content:
+                    input("Pressione Enter para tentar novamente...")
+                    continue
 
-        elif choice == '3':
-            # Modo Clipboard
-            script_content = run_command("termux-clipboard-get")
-            print(f"\n{GREEN}📋 Conteúdo do Clipboard:{RESET}\n{script_content}")
+            elif choice == '2':
+                # Modo Texto
+                logger.info("Iniciando entrada de texto manual")
+                print(f"\n{CYAN}📝 Digite seu roteiro (Pressione Enter 2x para finalizar):{RESET}")
+                lines = []
+                while True:
+                    line = input()
+                    if line:
+                        lines.append(line)
+                    else:
+                        break
+                script_content = "\n".join(lines)
 
-        elif choice == '4':
-            # Modo Arquivo Existente
-            # Listar scripts
-            scripts = [f for f in os.listdir("scripts") if f.endswith(".txt")]
-            if not scripts:
-                print(f"{RED}Nenhum script encontrado em /scripts.{RESET}")
-                input("Enter...")
-                continue
+            elif choice == '3':
+                # Modo Clipboard
+                logger.info("Capturando do clipboard")
+                script_content = run_command("termux-clipboard-get")
+                print(f"\n{GREEN}📋 Conteúdo do Clipboard:{RESET}\n{script_content}")
+
+            elif choice == '4':
+                # Modo Arquivo Existente
+                logger.info("Listando scripts existentes")
+                # Listar scripts
+                scripts = [f for f in os.listdir("scripts") if f.endswith(".txt")]
+                if not scripts:
+                    logger.warning("Nenhum script encontrado")
+                    print(f"{RED}Nenhum script encontrado em /scripts.{RESET}")
+                    input("Enter...")
+                    continue
+                    
+                print(f"\n{CYAN}📂 Scripts Disponíveis:{RESET}")
+                for i, s in enumerate(scripts):
+                    print(f"{YELLOW}[{i+1}]{RESET} {s}")
                 
-            print(f"\n{CYAN}📂 Scripts Disponíveis:{RESET}")
-            for i, s in enumerate(scripts):
-                print(f"{YELLOW}[{i+1}]{RESET} {s}")
-            
-            try:
-                sel = int(input(f"\n{CYAN}👉 Escolha o número:{RESET} ")) - 1
-                script_path = os.path.join("scripts", scripts[sel])
-            except:
-                print("Opção inválida.")
-                continue
+                try:
+                    sel = int(input(f"\n{CYAN}👉 Escolha o número:{RESET} ")) - 1
+                    script_path = os.path.join("scripts", scripts[sel])
+                    logger.info(f"Selecionado script: {script_path}")
+                except:
+                    logger.error("Opção de arquivo inválida")
+                    continue
 
-        elif choice == '5':
-            # Modo IA Gemini
-            print(f"\n{CYAN}🧠 Digite o TEMA do vídeo (ex: 'Estoicismo', 'Dicas de Python'):{RESET}")
-            topic = input(f"{YELLOW}👉 Tema:{RESET} ")
-            
-            if topic:
-                print(f"\n{YELLOW}⏳ Consultando o Cérebro Digital...{RESET}")
-                script_content = generate_script_from_topic(topic)
+            elif choice == '5':
+                # Modo IA Gemini
+                logger.info("Iniciando geração IA")
+                print(f"\n{CYAN}🧠 Digite o TEMA do vídeo (ex: 'Estoicismo', 'Dicas de Python'):{RESET}")
+                topic = input(f"{YELLOW}👉 Tema:{RESET} ")
                 
-                if script_content:
-                    print(f"\n{GREEN}📜 Roteiro Gerado:{RESET}\n{'-'*20}\n{script_content}\n{'-'*20}")
-                    confirm = input("\nUsar este roteiro? (s/n): ").lower()
-                    if confirm != 's':
-                        script_content = "" # Descarta
+                if topic:
+                    logger.info(f"Tema solicitado: {topic}")
+                    print(f"\n{YELLOW}⏳ Consultando o Cérebro Digital...{RESET}")
+                    script_content = generate_script_from_topic(topic)
+                    
+                    if script_content:
+                        print(f"\n{GREEN}📜 Roteiro Gerado:{RESET}\n{'-'*20}\n{script_content}\n{'-'*20}")
+                        confirm = input("\nUsar este roteiro? (s/n): ").lower()
+                        if confirm != 's':
+                            logger.info("Roteiro descartado pelo usuário")
+                            script_content = "" # Descarta
+                        else:
+                            logger.info("Roteiro confirmado pelo usuário")
 
-        # Processamento Pós-Input (Para opções 1, 2, 3, 5)
-        if choice in ['1', '2', '3', '5'] and script_content:
-            # Gerar nome do arquivo baseado no início do texto
-            slug = script_content[:20].strip().replace(" ", "_").lower()
-            slug = "".join(c for c in slug if c.isalnum() or c == "_")
-            if not slug: slug = "sem_titulo"
-            
-            timestamp = datetime.now().strftime("%H%M%S")
-            full_slug = f"ia_{slug}_{timestamp}" if choice == '5' else f"voice_{slug}_{timestamp}"
-            
-            script_path = save_script(script_content, full_slug)
-            print(f"\n{GREEN}💾 Script salvo em: {script_path}{RESET}")
+            # Processamento Pós-Input (Para opções 1, 2, 3, 5)
+            if choice in ['1', '2', '3', '5'] and script_content:
+                # Gerar nome do arquivo baseado no início do texto
+                slug = script_content[:20].strip().replace(" ", "_").lower()
+                slug = "".join(c for c in slug if c.isalnum() or c == "_")
+                if not slug: slug = "sem_titulo"
+                
+                timestamp = datetime.now().strftime("%H%M%S")
+                full_slug = f"ia_{slug}_{timestamp}" if choice == '5' else f"voice_{slug}_{timestamp}"
+                
+                script_path = save_script(script_content, full_slug)
+                logger.info(f"Script salvo em: {script_path}")
+                print(f"\n{GREEN}💾 Script salvo em: {script_path}{RESET}")
 
-        # Fase de Renderização
-        if script_path:
-            print(f"\n{CYAN}🎨 Escolha o Tema:{RESET}")
-            print("1. Yellow Punch (Padrão)")
-            print("2. Cyan Future")
-            print("3. Minimal Box")
-            
-            theme_map = {"1": "yellow_punch", "2": "cyan_future", "3": "minimal_box"}
-            theme_choice = input(f"{CYAN}👉 Opção (Enter=1):{RESET} ")
-            selected_theme = theme_map.get(theme_choice, "yellow_punch")
-            
-            print(f"\n{YELLOW}🚀 Iniciando Motor de Renderização...{RESET}")
-            try:
-                generate_video(script_path, selected_theme)
-                print(f"\n{GREEN}✅ Processo Concluído! Verifique a pasta Downloads.{RESET}")
-            except Exception as e:
-                print(f"{RED}❌ Erro na renderização: {e}{RESET}")
-            
-            input("\n[Enter] para voltar ao menu...")
+            # Fase de Renderização
+            if script_path:
+                print(f"\n{CYAN}🎨 Escolha o Tema:{RESET}")
+                print("1. Yellow Punch (Padrão)")
+                print("2. Cyan Future")
+                print("3. Minimal Box")
+                
+                theme_map = {"1": "yellow_punch", "2": "cyan_future", "3": "minimal_box"}
+                theme_choice = input(f"{CYAN}👉 Opção (Enter=1):{RESET} ")
+                selected_theme = theme_map.get(theme_choice, "yellow_punch")
+                
+                logger.info(f"Iniciando render com tema: {selected_theme}")
+                print(f"\n{YELLOW}🚀 Iniciando Motor de Renderização...{RESET}")
+                try:
+                    video_output = generate_video(script_path, selected_theme)
+                    logger.info(f"✅ Renderização concluída: {video_output}")
+                    
+                    # Adicionar à fila para processamento posterior (ex: postagem, backup)
+                    queue.add_task("finalize_video", {
+                        "video_path": str(video_output),
+                        "script_path": script_path,
+                        "theme": selected_theme,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    logger.info("Fila atualizada com tarefa de finalização")
+                    
+                    print(f"\n{GREEN}✅ Processo Concluído! Verifique a pasta Downloads.{RESET}")
+                except Exception as e:
+                    logger.error(f"Falha crítica na renderização: {e}")
+                    print(f"{RED}❌ Erro na renderização: {e}{RESET}")
+                
+                input("\n[Enter] para voltar ao menu...")
 
 if __name__ == "__main__":
     main()

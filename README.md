@@ -58,4 +58,24 @@ O projeto foi desenvolvido como parte da competição **Hackatime**, uma maraton
 - [Flavortown: Conheça iniciativas como esta](https://flavortown.hackclub.com/)  
 
 Nosso objetivo é experimentar, documentar e contribuir abertamente para a comunidade tech! 🎯  
-Adoraríamos receber seu feedback – dúvidas, sugestões ou contribuições são super bem-vindas! 😊
+## 🏗️ Architecture v3.0 (Absolute Cinema)
+
+O sistema agora opera em uma arquitetura modular robusta:
+
+1.  **Core Modules (`core/`)**: Lógica isolada para TTS, Vídeo e IA.
+2.  **Error Handling**: Sistema de retry automático e fallback de serviços.
+3.  **Queue System**: Integração com n8n + Fila Local (JSON) para processamento assíncrono.
+4.  **CLI Interface**: Menu interativo com suporte a comandos de voz e pipeline automático.
+
+### 📊 Benchmark Tool
+
+Para testar se seu Termux aguenta o render:
+
+```bash
+python3 scripts/benchmark_system.py
+```
+
+---
+
+**Desenvolvido com 🤖 + ☕ por Homes Architect**
+
