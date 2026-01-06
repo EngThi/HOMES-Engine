@@ -10,6 +10,19 @@ from dotenv import load_dotenv
 # Carregar variáveis do .env
 load_dotenv()
 
+def load_from_secrets(key_name: str) -> str:
+    """Fallback para ler do arquivo .secrets se não estiver no ambiente."""
+    try:
+        secrets_path = Path(__file__).parent / ".secrets"
+        if secrets_path.exists():
+            with open(secrets_path, "r") as f:
+                for line in f:
+                    if line.startswith(f"{key_name}="):
+                        return line.strip().split("=")[1]
+    except Exception:
+        pass
+    return ""
+
 # ===== PATHS =====
 PROJECT_ROOT = Path(__file__).parent.absolute()
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
@@ -21,8 +34,8 @@ for dir_path in [SCRIPTS_DIR, OUTPUT_DIR, ASSETS_DIR]:
     dir_path.mkdir(exist_ok=True)
 
 # ===== API KEYS =====
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GOOGLE_CLOUD_TTS_API_KEY = os.getenv("GOOGLE_CLOUD_TTS_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or load_from_secrets("GEMINI_API_KEY")
+GOOGLE_CLOUD_TTS_API_KEY = os.getenv("GOOGLE_CLOUD_TTS_API_KEY") or load_from_secrets("GOOGLE_CLOUD_TTS_API_KEY")
 
 # ===== TERMUX API =====
 USE_TERMUX_API = os.getenv("USE_TERMUX_API", "true").lower() == "true"

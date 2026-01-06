@@ -11,8 +11,7 @@ from config import (
     AUDIO_SAMPLE_RATE, get_theme, OUTPUT_DIR,
     ASSETS_DIR, SCRIPTS_DIR
 )
-
-from typing import List, Optional
+from core.ffmpeg_engine import FFmpegEngine
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -47,15 +46,9 @@ THEMES_STYLE = {
 
 def get_audio_duration(audio_path: str) -> float:
     """
-    Obtém a duração de um arquivo de áudio em segundos usando ffprobe.
+    Obtém a duração de um arquivo de áudio em segundos delegando ao FFmpegEngine.
     """
-    try:
-        result = subprocess.check_output(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", audio_path]
-        )
-        return float(result.strip())
-    except:
-        return 10.0
+    return FFmpegEngine.get_duration(audio_path)
 
 def shift_vtt_timestamps(vtt_path: str, offset_seconds: float) -> None:
     """
@@ -171,12 +164,8 @@ def generate_video(script_path, theme_name="yellow_punch"):
         # Adiciona clipes de vídeo aos inputs
         for i, clip in enumerate(broll_clips):
             inputs.extend(["-i", clip])
-            # Efeito Ken Burns (Zoom Dinâmico) + Escala
-            # O zoompan faz um leve zoom de 1.0 para 1.1 ao longo da duração
-            filter_complex += (
-                f"[{i}:v]scale=1280:2276,zoompan=z='min(zoom+0.001,1.1)':d={int(clip_duration*VIDEO_FPS)}:s=720x1280:fps={VIDEO_FPS},"
-                f"trim=duration={clip_duration},setpts=PTS-STARTPTS[v{i}];"
-            )
+            # Efeito Ken Burns (Zoom Dinâmico) via FFmpegEngine
+            filter_complex += FFmpegEngine.build_zoompan_filter(i, clip_duration, VIDEO_FPS)
         
         # Concatena os streams de vídeo processados
         concat_inputs = "".join([f"[v{i}]" for i in range(len(broll_clips))])
@@ -230,6 +219,7 @@ def generate_video(script_path, theme_name="yellow_punch"):
         ]
         
         subprocess.run(cmd, check=True)
+        # Substituído por FFmpegEngine futuramente se necessário
         
         # 6. Copiar para Download
         android_download_path = f"/sdcard/Download/{output_filename}"
