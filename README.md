@@ -15,6 +15,13 @@ nano .env  # Adicionar GEMINI_API_KEY
 python main.py
 ```
 
+## ✨ Novidades v3.0 (Absolute Cinema)
+- **🧠 Modular Architecture:** Motor de IA, TTS e FFmpeg isolados em módulos independentes no `core/`.
+- **🎨 Smart Assets:** Geração automática de imagens via **Pollinations.ai (FLUX)** quando o B-Roll é insuficiente.
+- **🎬 Professional FFmpeg Engine:** ZoomPan (Ken Burns), standardização de SAR e mixagem inteligente de áudio.
+- **🛡️ Audit & Security:** Scripts de verificação de segredos e suporte a variáveis de ambiente centralizadas.
+- **📱 Termux Optimized:** Pipeline testado e otimizado para hardware ARM64 com suporte a Voz via Termux API.
+
 ### Primeiro uso:
 1. Digite ou fale um roteiro
 2. Escolha tema
