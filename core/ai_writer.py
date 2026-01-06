@@ -65,3 +65,24 @@ def generate_script_from_topic(topic: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"❌ Falha na conexão: {e}")
         return None
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description="Gerador de Roteiro AI")
+    parser.add_argument("--topic", type=str, required=True, help="Tema do vídeo")
+    parser.add_argument("--out", type=str, required=True, help="Caminho do arquivo de saída")
+    
+    args = parser.parse_args()
+    
+    logging.basicConfig(level=logging.INFO)
+    
+    script = generate_script_from_topic(args.topic)
+    if script:
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(script)
+        print(f"✅ Roteiro salvo em: {args.out}")
+    else:
+        print("❌ Falha ao gerar roteiro.")
+        sys.exit(1)
