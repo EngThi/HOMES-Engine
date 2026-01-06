@@ -6,6 +6,7 @@ import random
 import re
 import math
 from datetime import datetime
+from typing import List, Optional
 from config import (
     VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS,
     AUDIO_SAMPLE_RATE, get_theme, OUTPUT_DIR,

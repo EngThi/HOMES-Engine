@@ -35,8 +35,8 @@ class FFmpegEngine:
 
     @staticmethod
     def build_zoompan_filter(index: int, duration: float, fps: int) -> str:
-        """Cria o efeito Ken Burns (ZoomPan)."""
+        """Cria o efeito Ken Burns (ZoomPan) com standardização de SAR e formato."""
         return (
             f"[{index}:v]scale=1280:2276,zoompan=z='min(zoom+0.001,1.1)':d={int(duration*fps)}:s=720x1280:fps={fps},"
-            f"trim=duration={duration},setpts=PTS-STARTPTS[v{index}];"
+            f"setsar=1,format=yuv420p,trim=duration={duration},setpts=PTS-STARTPTS[v{index}];"
         )
