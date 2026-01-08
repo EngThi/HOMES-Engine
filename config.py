@@ -35,6 +35,7 @@ for dir_path in [SCRIPTS_DIR, OUTPUT_DIR, ASSETS_DIR]:
 
 # ===== API KEYS =====
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or load_from_secrets("GEMINI_API_KEY")
+POLLINATIONS_API_KEY = os.getenv("POLLINATIONS_API_KEY") or load_from_secrets("POLLINATIONS_API_KEY")
 GOOGLE_CLOUD_TTS_API_KEY = os.getenv("GOOGLE_CLOUD_TTS_API_KEY") or load_from_secrets("GOOGLE_CLOUD_TTS_API_KEY")
 
 # ===== TERMUX API =====
