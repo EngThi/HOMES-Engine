@@ -1,68 +1,96 @@
 import requests
 import logging
+import os
+import base64
+import urllib.parse
 from pathlib import Path
 from typing import Optional
-import urllib.parse
-from config import ASSETS_DIR
+from config import ASSETS_DIR, GEMINI_API_KEY
 
 logger = logging.getLogger(__name__)
 
 class ImageGenerator:
     """
-    Gerador de imagens usando a API do Pollinations.ai (Modelo FLUX).
-    Baseado nas recomendações de Olhe.md.
+    Gerador de imagens Híbrido:
+    Tenta Gemini 2.5 Flash Image -> Fallback para Pollinations (FLUX)
     """
     
-    BASE_URL = "https://image.pollinations.ai/prompt/"
-    DEFAULT_MODEL = "flux"
+    POLLINATIONS_URL = "https://image.pollinations.ai/prompt/"
+    GEMINI_MODEL = "gemini-2.5-flash-image"
     
     @staticmethod
-    def generate_image(prompt: str, filename: str, model: str = DEFAULT_MODEL, width: int = 1024, height: int = 1024) -> Optional[str]:
+    def generate_image(prompt: str, filename: str, width: int = 1024, height: int = 1024) -> Optional[str]:
         """
-        Gera uma imagem via Pollinations.ai e salva no diretório de assets.
-        
-        Args:
-            prompt (str): Descrição da imagem.
-            filename (str): Nome do arquivo de saída (ex: 'background_1.jpg').
-            model (str): Modelo a ser usado (padrão: flux).
-            width (int): Largura da imagem.
-            height (int): Altura da imagem.
-            
-        Returns:
-            Optional[str]: Caminho absoluto da imagem salva ou None em caso de erro.
+        Orquestra a geração de imagem com fallback.
         """
-        try:
-            encoded_prompt = urllib.parse.quote(prompt)
-            url = f"{ImageGenerator.BASE_URL}{encoded_prompt}?model={model}&width={width}&height={height}&seed={urllib.parse.quote(str(os.urandom(4)))}"
+        # 1. Tentativa com Gemini (Nativo)
+        result = ImageGenerator._generate_via_gemini(prompt, filename)
+        if result:
+            return result
             
-            # Garantir que a pasta de assets existe
-            output_dir = Path(ASSETS_DIR) / "generated"
-            output_dir.mkdir(exist_ok=True)
-            
-            file_path = output_dir / filename
-            
-            logger.info(f"🎨 Gerando imagem: '{prompt}' via {model}...")
-            response = requests.get(url, timeout=30)
-            
-            if response.status_code == 200:
-                with open(file_path, "wb") as f:
-                    f.write(response.content)
-                logger.info(f"✅ Imagem salva em: {file_path}")
-                return str(file_path.absolute())
-            else:
-                logger.error(f"❌ Erro na API Pollinations: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"❌ Falha na geração de imagem: {e}")
+        # 2. Fallback para Pollinations (Garantido)
+        logger.warning("⚠️ Gemini Image indisponível (Quota?). Usando Fallback Pollinations/FLUX...")
+        return ImageGenerator._generate_via_pollinations(prompt, filename, width, height)
+
+    @staticmethod
+    def _generate_via_gemini(prompt: str, filename: str) -> Optional[str]:
+        """Geração via Google Gemini 2.5"""
+        if not GEMINI_API_KEY:
             return None
+            
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{ImageGenerator.GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["IMAGE"]}
+        }
+        
+        try:
+            response = requests.post(url, json=payload, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                image_b64 = data['candidates'][0]['content']['parts'][0]['inlineData']['data']
+                
+                output_path = Path(ASSETS_DIR) / "generated" / filename
+                output_path.parent.mkdir(exist_ok=True)
+                
+                with open(output_path, "wb") as f:
+                    f.write(base64.b64decode(image_b64))
+                
+                logger.info(f"✅ Imagem gerada via Gemini: {output_path}")
+                return str(output_path.absolute())
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _generate_via_pollinations(prompt: str, filename: str, width: int, height: int) -> Optional[str]:
+        """Geração via Pollinations.ai (Flux) com Retry"""
+        retries = 3
+        for i in range(retries):
+            try:
+                encoded_prompt = urllib.parse.quote(prompt)
+                seed = urllib.parse.quote(str(os.urandom(4)))
+                url = f"{ImageGenerator.POLLINATIONS_URL}{encoded_prompt}?model=flux&width={width}&height={height}&seed={seed}"
+                
+                output_path = Path(ASSETS_DIR) / "generated" / filename
+                output_path.parent.mkdir(exist_ok=True)
+                
+                logger.info(f"🎨 Tentativa {i+1} via Pollinations...")
+                response = requests.get(url, timeout=60) # Aumentado para 60s
+                if response.status_code == 200:
+                    with open(output_path, "wb") as f:
+                        f.write(response.content)
+                    logger.info(f"✅ Imagem gerada via Pollinations: {output_path}")
+                    return str(output_path.absolute())
+            except Exception as e:
+                logger.warning(f"⚠️ Tentativa {i+1} falhou: {e}")
+                time.sleep(2)
+        
+        logger.error("❌ Falha total na geração de imagem após retries.")
+        return None
 
 if __name__ == "__main__":
-    import os
     logging.basicConfig(level=logging.INFO)
-    # Teste rápido
-    path = ImageGenerator.generate_image("A futuristic cyberpunk city in the clouds, cinematic lighting, 8k", "test_flux.jpg")
-    if path:
-        print(f"Sucesso: {path}")
-    else:
-        print("Falha no teste.")
+    # Teste do sistema híbrido
+    path = ImageGenerator.generate_image("A majestic phoenix rising from the ashes, vertical, 8k cinematic", "hybrid_test.jpg")
+    print(f"Resultado: {path}")
