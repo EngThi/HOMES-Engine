@@ -3,6 +3,11 @@ import requests
 import json
 import os
 import logging
+import sys
+
+# Injetar a raiz do projeto no path para encontrar o config.py
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from config import SCRIPTS_DIR, GEMINI_API_KEY
 from core.video_maker import generate_video
 

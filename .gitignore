@@ -23,4 +23,11 @@ scripts/*.txt
 .wakatime-project
 .wakatime.cfg
 .env
-.secretslab_session.py
+.secrets
+# --- FARMING SIMULATION ---
+simulation_output/
+farm_*.py
+auto_coder.py
+.gemini/
+visual_farmer.py
+farming.log
