@@ -10,10 +10,12 @@ from typing import List, Optional
 from config import (
     VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS,
     AUDIO_SAMPLE_RATE, get_theme, OUTPUT_DIR,
-    ASSETS_DIR, SCRIPTS_DIR
+    ASSETS_DIR, SCRIPTS_DIR, TTS_ENGINE
 )
 from core.ffmpeg_engine import FFmpegEngine
 from core.color_utils import rgb_to_ass_hex
+from core.gemini_tts import GeminiTTS
+from core.subtitle_utils import generate_vtt_from_text
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -125,15 +127,15 @@ def get_dynamic_broll_sequence(target_duration: float, clip_duration: float = 3.
 
 def generate_video(script_path, theme_name="yellow_punch"):
     """
-    v1.4: Dynamic B-Roll (Cortes Rápidos) + Music Ducking + Themes
+    v1.5: Suporte Híbrido (Edge-TTS ou Gemini TTS + Estimated VTT)
     """
     create_dirs()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     script_name = os.path.basename(script_path).replace(".txt", "")
     
-    output_filename = f"HOMES_v1.4_{timestamp}.mp4"
+    output_filename = f"HOMES_v1.5_{timestamp}.mp4"
     output_file = os.path.join(RENDER_DIR, output_filename)
-    audio_file = os.path.join(CACHE_DIR, f"{script_name}_audio.mp3")
+    audio_file = os.path.join(CACHE_DIR, f"{script_name}_audio.wav") # Agora padronizamos WAV para Gemini
     subs_file = os.path.join(CACHE_DIR, f"{script_name}_subs.vtt")
     
     # 1. Gerar Áudio e Legenda
@@ -141,22 +143,38 @@ def generate_video(script_path, theme_name="yellow_punch"):
         with open(script_path, 'r', encoding='utf-8') as f:
             content = f.read().strip()
         
-        logger.info(f"🎤 Gerando narração...")
-        voice = "pt-BR-AntonioNeural"
-        subprocess.run([
-            "edge-tts", "--text", content, "--write-media", audio_file, 
-            "--write-subtitles", subs_file, "--voice", voice
-        ], check=True)
+        # --- LÓGICA HÍBRIDA DE TTS ---
+        if TTS_ENGINE == "gemini":
+            logger.info(f"🎤 Gerando narração com GEMINI 2.5 FLASH (Kore)...")
+            tts = GeminiTTS()
+            # Usa WAV puro
+            tts.generate(content, audio_file, voice="Kore")
+            
+            # Gera Legendas Estimadas
+            logger.info("📝 Gerando legendas estimadas (VTT)...")
+            audio_duration_raw = get_audio_duration(audio_file)
+            generate_vtt_from_text(content, audio_duration_raw, subs_file)
+            
+        else:
+            logger.info(f"🎤 Gerando narração com EDGE-TTS (Antonio)...")
+            # Edge-TTS gera MP3 por padrão, vamos manter compatibilidade
+            audio_file = audio_file.replace(".wav", ".mp3")
+            voice = "pt-BR-AntonioNeural"
+            subprocess.run([
+                "edge-tts", "--text", content, "--write-media", audio_file, 
+                "--write-subtitles", subs_file, "--voice", voice
+            ], check=True)
+        # -----------------------------
         
         # Sincronização
-        intro_delay = 1.0 # Reduzi um pouco para ficar mais dinâmico
+        intro_delay = 1.0 
         shift_vtt_timestamps(subs_file, intro_delay)
         
         audio_duration = get_audio_duration(audio_file)
         video_duration = audio_duration + intro_delay + 1.0
         
         # 2. Preparar B-Roll Dinâmico
-        clip_duration = 4.0 # 4 segundos por clipe
+        clip_duration = 4.0 
         broll_clips = get_dynamic_broll_sequence(video_duration, clip_duration)
         
         if not broll_clips:
@@ -205,9 +223,6 @@ def generate_video(script_path, theme_name="yellow_punch"):
             inputs.extend(["-stream_loop", "-1", "-i", music_path])
             
             # CONFIGURAÇÃO DE ÁUDIO (SIDECHAIN COMPRESSION)
-            # 1. adelay: Atraso no início da narração para dar tempo da música começar
-            # 2. volume=1.8: Aumenta o volume da voz (Narrador) para destaque
-            # 3. volume=0.3: Volume base da música de fundo (Reduzido de 0.4 para 0.3 para mais clareza)
             filter_complex += (
                 f";[{narration_input_index}:a]adelay={int(intro_delay*1000)}|{int(intro_delay*1000)},volume=1.8,asplit[narr1][narr2];"
                 f"[{music_input_index}:a]volume=0.3[bgm];"
@@ -220,7 +235,7 @@ def generate_video(script_path, theme_name="yellow_punch"):
             )
 
         # 5. Comando Final
-        logger.info(f"🎬 Renderizando v1.4 (HQ Mode)...")
+        logger.info(f"🎬 Renderizando v1.5 (Hybrid Mode)...")
         cmd = ["ffmpeg"] + inputs + [
             "-filter_complex", filter_complex,
             "-map", "[v_out]", "-map", "[a_out]",
@@ -231,13 +246,12 @@ def generate_video(script_path, theme_name="yellow_punch"):
         ]
         
         subprocess.run(cmd, check=True)
-        # Substituído por FFmpegEngine futuramente se necessário
         
         # 6. Copiar para Download
         android_download_path = f"/sdcard/Download/{output_filename}"
         try:
             subprocess.run(["cp", output_file, android_download_path], check=True)
-            print(f"\n🚀 ABSOLUTE CINEMA v1.4 (DYNAMIC) OPERACIONAL!")
+            print(f"\n🚀 ABSOLUTE CINEMA v1.5 (HYBRID) OPERACIONAL!")
             print(f"🎬 Vídeo: {output_filename}")
             print(f"📍 Pasta: Downloads do Celular")
         except:
@@ -245,12 +259,10 @@ def generate_video(script_path, theme_name="yellow_punch"):
 
     except Exception as e:
         logger.error(f"❌ Erro Crítico: {e}")
-        # Debug: Mostrar comando se falhar?
-        # print(cmd)
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="HOMES Engine v1.4 - Video Maker")
+    parser = argparse.ArgumentParser(description="HOMES Engine v1.5 - Video Maker")
     parser.add_argument("script", help="Caminho para o arquivo de roteiro (.txt)")
     parser.add_argument("--theme", default="yellow_punch", help="Tema visual (default, yellow_punch, cyan_future, minimal_box)")
     

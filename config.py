@@ -81,6 +81,7 @@ AUDIO_SAMPLE_RATE = 44100
 AUDIO_MONO = True
 TTS_LANGUAGE = "pt-BR"
 TTS_GENDER = "NEUTRAL"
+TTS_ENGINE = "gemini" # Opções: "edge" (com legendas perfeitas), "gemini" (voz superior, legendas estimadas)
 
 # ===== AI SETTINGS =====
 GEMINI_MODEL = "gemini-2.5-flash"
