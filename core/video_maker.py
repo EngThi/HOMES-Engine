@@ -186,16 +186,25 @@ def generate_video(script_path, theme_name="yellow_punch"):
         # 3. Construir Filtro Complexo do FFmpeg
         inputs = []
         filter_complex = ""
+        modes = ["zoom_in", "zoom_out", "pan_left", "pan_right"]
         
         # Adiciona clipes de vídeo aos inputs
         for i, clip in enumerate(broll_clips):
             inputs.extend(["-i", clip])
-            # Efeito Ken Burns (Zoom Dinâmico) via FFmpegEngine
-            filter_complex += FFmpegEngine.build_zoompan_filter(i, clip_duration, VIDEO_FPS)
+            # Sorteia um movimento de câmera para cada clipe (Diretor Autônomo)
+            mode = random.choice(modes)
+            logger.info(f"🎬 Clipe {i}: Aplicando movimento '{mode}'")
+            filter_complex += FFmpegEngine.build_zoompan_filter(i, clip_duration, VIDEO_FPS, mode=mode)
         
         # Concatena os streams de vídeo processados
         concat_inputs = "".join([f"[v{i}]" for i in range(len(broll_clips))])
         filter_complex += f"{concat_inputs}concat=n={len(broll_clips)}:v=1:a=0[v_base];"
+
+        # Notifica o Agente Vidal (HOMES)
+        try:
+            msg = "Vidal, renderização do Absolute Cinema iniciada. Preparando o próximo hit."
+            subprocess.run(["termux-tts-speak", msg], capture_output=True)
+        except: pass
         
         # Loop se necessário (segurança) e Legendas
         ffmpeg_subs = subs_file.replace(":", "\\:")

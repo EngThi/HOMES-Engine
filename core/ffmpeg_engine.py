@@ -34,9 +34,36 @@ class FFmpegEngine:
             return False
 
     @staticmethod
-    def build_zoompan_filter(index: int, duration: float, fps: int) -> str:
-        """Cria o efeito Ken Burns (ZoomPan) com standardização de SAR e formato."""
+    def build_zoompan_filter(index: int, duration: float, fps: int, mode: str = "zoom_in") -> str:
+        """
+        Cria o efeito Ken Burns (ZoomPan) Cinematográfico.
+        Modos: zoom_in, zoom_out, pan_left, pan_right
+        """
+        d = int(duration * fps)
+        s = "720x1280" # Resolução vertical para shorts/reels
+        
+        # Lógica de Movimento de Câmera (Ken Burns 2.0)
+        if mode == "zoom_in":
+            z = "min(zoom+0.0015,1.5)"
+            x = "iw/2-(iw/zoom/2)"
+            y = "ih/2-(ih/zoom/2)"
+        elif mode == "zoom_out":
+            z = "if(eq(on,0),1.5,max(zoom-0.0015,1))"
+            x = "iw/2-(iw/zoom/2)"
+            y = "ih/2-(ih/zoom/2)"
+        elif mode == "pan_left":
+            z = "1.3"
+            x = f"(1-on/{d})*(iw-iw/zoom)"
+            y = "ih/2-(ih/zoom/2)"
+        else: # pan_right
+            z = "1.3"
+            x = f"(on/{d})*(iw-iw/zoom)"
+            y = "ih/2-(ih/zoom/2)"
+
+        # Color Grading: Aumenta contraste e saturação para o look "Absolute Cinema"
+        color_grade = "eq=contrast=1.15:saturation=1.3:brightness=0.02"
+        
         return (
-            f"[{index}:v]scale=1280:2276,zoompan=z='min(zoom+0.001,1.1)':d={int(duration*fps)}:s=720x1280:fps={fps},"
-            f"setsar=1,format=yuv420p,trim=duration={duration},setpts=PTS-STARTPTS[v{index}];"
+            f"[{index}:v]scale=2000:-1,zoompan=z='{z}':x='{x}':y='{y}':d={d}:s={s}:fps={fps},"
+            f"{color_grade},setsar=1,format=yuv420p,trim=duration={duration},setpts=PTS-STARTPTS[v{index}];"
         )
