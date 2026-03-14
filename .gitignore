@@ -31,3 +31,7 @@ auto_coder.py
 .gemini/
 visual_farmer.py
 farming.log
+video_maker.py
+scripts/editor_helper.py
+simulation_output/
+logs/
