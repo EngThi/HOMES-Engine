@@ -1,279 +1,55 @@
-import os
-import subprocess
-import sys
-import logging
-import random
-import re
-import math
+import os, subprocess, sys, logging, random, re, math
 from datetime import datetime
 from typing import List, Optional
-from config import (
-    VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS,
-    AUDIO_SAMPLE_RATE, get_theme, OUTPUT_DIR,
-    ASSETS_DIR, SCRIPTS_DIR, TTS_ENGINE
-)
+from config import VIDEO_FPS, OUTPUT_DIR, ASSETS_DIR, SCRIPTS_DIR, TTS_ENGINE
 from core.ffmpeg_engine import FFmpegEngine
-from core.color_utils import rgb_to_ass_hex
 from core.gemini_tts import GeminiTTS
-from core.subtitle_utils import generate_vtt_from_text
+from core.subtitle_utils import generate_ass_from_text
 
-# Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Configurações Globais (vinda da config)
-BROLL_DIR = os.path.join(ASSETS_DIR, "broll")
-AUDIO_ASSETS_DIR = os.path.join(ASSETS_DIR, "audio")
-RENDER_DIR = os.path.join(OUTPUT_DIR, "renders")
-CACHE_DIR = os.path.join(OUTPUT_DIR, "cache")
-FONT_PATH = os.path.join(ASSETS_DIR, "fonts", "Montserrat-ExtraBold.ttf")
-
-# Cores Base (RGB)
-COLOR_WHITE = (255, 255, 255)
-COLOR_YELLOW = (255, 255, 0)
-COLOR_CYAN = (0, 255, 255)
-COLOR_BLACK_TRANSPARENT = (0, 0, 0) # Alpha controlado separadamente
-
-# Temas Visuais (v1.5 - Powered by color_utils)
-THEMES_STYLE = {
-    "default": (
-        f"Alignment=2,BorderStyle=3,Outline=1,Shadow=0,"
-        f"MarginV=40,Fontname=Montserrat ExtraBold,FontSize=18,PrimaryColour={rgb_to_ass_hex(COLOR_WHITE)}"
-    ),
-    "yellow_punch": (
-        f"Alignment=2,BorderStyle=1,Outline=2,Shadow=0,"
-        f"MarginV=40,Fontname=Montserrat ExtraBold,FontSize=20,PrimaryColour={rgb_to_ass_hex(COLOR_YELLOW)},OutlineColour=&H00000000"
-    ),
-    "cyan_future": (
-        f"Alignment=2,BorderStyle=1,Outline=2,Shadow=0,"
-        f"MarginV=40,Fontname=Montserrat ExtraBold,FontSize=20,PrimaryColour={rgb_to_ass_hex(COLOR_CYAN)},OutlineColour=&H00000000"
-    ),
-    "minimal_box": (
-        f"Alignment=2,BorderStyle=3,Outline=0,Shadow=0,"
-        f"MarginV=50,Fontname=Montserrat ExtraBold,FontSize=16,PrimaryColour={rgb_to_ass_hex(COLOR_WHITE)},BackColour={rgb_to_ass_hex(COLOR_BLACK_TRANSPARENT, alpha=128)}"
-    )
-}
-
-def get_audio_duration(audio_path: str) -> float:
-    """
-    Obtém a duração de um arquivo de áudio em segundos delegando ao FFmpegEngine.
-    """
-    return FFmpegEngine.get_duration(audio_path)
-
-def shift_vtt_timestamps(vtt_path: str, offset_seconds: float) -> None:
-    """
-    Ajusta os timestamps de um arquivo VTT por um deslocamento de segundos.
-    Útil para sincronizar legendas com atrasos propositais no início do áudio.
-    """
-    def shift_match(match):
-        h, m, s, ms = map(float, match.groups())
-        total_seconds = h * 3600 + m * 60 + s + ms / 1000 + offset_seconds
-        new_h = int(total_seconds // 3600)
-        new_m = int((total_seconds % 3600) // 60)
-        new_s = int(total_seconds % 60)
-        new_ms = int((total_seconds * 1000) % 1000)
-        return f"{new_h:02d}:{new_m:02d}:{new_s:02d}.{new_ms:03d}"
-
-    pattern = re.compile(r"(\d{2}):(\d{2}):(\d{2})\.(\d{3})")
-    
-    with open(vtt_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    new_content = pattern.sub(shift_match, content)
-    
-    with open(vtt_path, 'w', encoding='utf-8') as f:
-        f.write(new_content)
-
-def create_dirs():
-    os.makedirs(ASSETS_DIR, exist_ok=True)
-    os.makedirs(BROLL_DIR, exist_ok=True)
-    os.makedirs(AUDIO_ASSETS_DIR, exist_ok=True)
-    os.makedirs(RENDER_DIR, exist_ok=True)
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    os.makedirs(SCRIPTS_DIR, exist_ok=True)
-
-def find_background_music():
-    if not os.path.exists(AUDIO_ASSETS_DIR):
-        return None
-    for ext in ['mp3', 'wav']:
-        for file in os.listdir(AUDIO_ASSETS_DIR):
-            if file.lower().endswith(f".{ext}"):
-                return os.path.join(AUDIO_ASSETS_DIR, file)
-    return None
-
-def get_dynamic_broll_sequence(target_duration: float, clip_duration: float = 3.0) -> List[str]:
-    """
-    Seleciona múltiplos clipes aleatórios para cobrir a duração total.
-    Retorna lista de caminhos absolutos.
-    """
-    if not os.path.exists(BROLL_DIR):
-        return []
-        
-    files = [os.path.join(BROLL_DIR, f) for f in os.listdir(BROLL_DIR) if f.lower().endswith('.mp4')]
-    
-    if not files:
-        # Fallback para background estático se não houver clipes
-        default_bg = os.path.join(ASSETS_DIR, "background.mp4")
-        return [default_bg] if os.path.exists(default_bg) else []
-
-    num_clips = math.ceil(target_duration / clip_duration)
-    sequence = []
-    
-    # Preenche a sequência garantindo variedade
-    for _ in range(num_clips):
-        sequence.append(random.choice(files))
-        
-    return sequence
+BROLL_DIR, AUDIO_DIR = os.path.join(ASSETS_DIR, "broll"), os.path.join(ASSETS_DIR, "audio")
+RENDER_DIR, CACHE_DIR = os.path.join(OUTPUT_DIR, "renders"), os.path.join(OUTPUT_DIR, "cache")
 
 def generate_video(script_path, theme_name="yellow_punch"):
-    """
-    v1.5: Suporte Híbrido (Edge-TTS ou Gemini TTS + Estimated VTT)
-    """
-    create_dirs()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    script_name = os.path.basename(script_path).replace(".txt", "")
-    
-    output_filename = f"HOMES_v1.5_{timestamp}.mp4"
-    output_file = os.path.join(RENDER_DIR, output_filename)
-    audio_file = os.path.join(CACHE_DIR, f"{script_name}_audio.wav") # Agora padronizamos WAV para Gemini
-    subs_file = os.path.join(CACHE_DIR, f"{script_name}_subs.vtt")
-    
-    # 1. Gerar Áudio e Legenda
+    """v1.7: ABSOLUTE CINEMA - Dynamic Subtitles & Audio Mastering"""
+    os.makedirs(RENDER_DIR, exist_ok=True); os.makedirs(CACHE_DIR, exist_ok=True)
+    timestamp, script_name = datetime.now().strftime("%Y%m%d_%H%M%S"), os.path.basename(script_path).replace(".txt", "")
+    output_file = os.path.join(RENDER_DIR, f"HOMES_v1.7_{timestamp}.mp4")
+    audio_file, subs_file = os.path.join(CACHE_DIR, f"{script_name}_audio.wav"), os.path.join(CACHE_DIR, f"{script_name}_subs.ass")
+
     try:
-        with open(script_path, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-        
-        # --- LÓGICA HÍBRIDA DE TTS ---
+        with open(script_path, 'r', encoding='utf-8') as f: content = f.read().strip()
         if TTS_ENGINE == "gemini":
-            logger.info(f"🎤 Gerando narração com GEMINI 2.5 FLASH (Kore)...")
-            tts = GeminiTTS()
-            # Usa WAV puro
-            tts.generate(content, audio_file, voice="Kore")
-            
-            # Gera Legendas Estimadas
-            logger.info("📝 Gerando legendas estimadas (VTT)...")
-            audio_duration_raw = get_audio_duration(audio_file)
-            generate_vtt_from_text(content, audio_duration_raw, subs_file)
-            
+            GeminiTTS().generate(content, audio_file, voice="Kore")
         else:
-            logger.info(f"🎤 Gerando narração com EDGE-TTS (Antonio)...")
-            # Edge-TTS gera MP3 por padrão, vamos manter compatibilidade
             audio_file = audio_file.replace(".wav", ".mp3")
-            voice = "pt-BR-AntonioNeural"
-            subprocess.run([
-                "edge-tts", "--text", content, "--write-media", audio_file, 
-                "--write-subtitles", subs_file, "--voice", voice
-            ], check=True)
-        # -----------------------------
+            subprocess.run(["edge-tts", "--text", content, "--write-media", audio_file, "--voice", "pt-BR-AntonioNeural"], check=True)
         
-        # Sincronização
-        intro_delay = 1.0 
-        shift_vtt_timestamps(subs_file, intro_delay)
+        duration = FFmpegEngine.get_duration(audio_file)
+        generate_ass_from_text(content, duration, subs_file)
+        v_dur = duration + 2.0
         
-        audio_duration = get_audio_duration(audio_file)
-        video_duration = audio_duration + intro_delay + 1.0
+        clips = [os.path.join(BROLL_DIR, f) for f in os.listdir(BROLL_DIR) if f.endswith('.mp4')]
+        brolls = [random.choice(clips) for _ in range(math.ceil(v_dur/4))]
         
-        # 2. Preparar B-Roll Dinâmico
-        clip_duration = 4.0 
-        broll_clips = get_dynamic_broll_sequence(video_duration, clip_duration)
+        inputs, filter_c = [], ""
+        for i, b in enumerate(brolls):
+            inputs.extend(["-i", b])
+            filter_c += FFmpegEngine.build_zoompan_filter(i, 4.0, VIDEO_FPS, random.choice(["zoom_in", "zoom_out"]))
         
-        if not broll_clips:
-            logger.error("❌ Nenhum arquivo de vídeo encontrado em assets/broll/ ou assets/background.mp4")
-            return
-
-        logger.info(f"🎞️ Sequência de B-Roll: {len(broll_clips)} clipes para {video_duration:.1f}s")
-
-        # 3. Construir Filtro Complexo do FFmpeg
-        inputs = []
-        filter_complex = ""
-        modes = ["zoom_in", "zoom_out", "pan_left", "pan_right"]
+        filter_c += "".join([f"[v{i}]" for i in range(len(brolls))]) + f"concat=n={len(brolls)}:v=1:a=0[v_base];"
+        filter_c += f"[v_base]eq=contrast=1.1:saturation=1.2,vignette='PI/4'[v_gr];[v_gr]ass={subs_file.replace(':','\\\\:')}[v_out]"
         
-        # Adiciona clipes de vídeo aos inputs
-        for i, clip in enumerate(broll_clips):
-            inputs.extend(["-i", clip])
-            # Sorteia um movimento de câmera para cada clipe (Diretor Autônomo)
-            mode = random.choice(modes)
-            logger.info(f"🎬 Clipe {i}: Aplicando movimento '{mode}'")
-            filter_complex += FFmpegEngine.build_zoompan_filter(i, clip_duration, VIDEO_FPS, mode=mode)
-        
-        # Concatena os streams de vídeo processados
-        concat_inputs = "".join([f"[v{i}]" for i in range(len(broll_clips))])
-        filter_complex += f"{concat_inputs}concat=n={len(broll_clips)}:v=1:a=0[v_base];"
-
-        # Notifica o Agente Vidal (HOMES)
-        try:
-            msg = "Vidal, renderização do Absolute Cinema iniciada. Preparando o próximo hit."
-            subprocess.run(["termux-tts-speak", msg], capture_output=True)
-        except: pass
-        
-        # Loop se necessário (segurança) e Legendas
-        ffmpeg_subs = subs_file.replace(":", "\\:")
-        
-        # Seleção de Tema (Safe Get)
-        if theme_name not in THEMES_STYLE:
-            logger.warning(f"⚠️ Tema '{theme_name}' não encontrado. Usando 'yellow_punch'.")
-            theme_name = "yellow_punch"
-            
-        selected_theme = THEMES_STYLE[theme_name]
-        logger.info(f"🎨 Tema Visual: {theme_name}")
-        
-        filter_complex += (
-            f"[v_base]loop=-1:size=32767:start=0[v_looped];"
-            f"[v_looped]subtitles={ffmpeg_subs}:force_style='{selected_theme}'[v_out]"
-        )
-
-        # 4. Áudio (Music Ducking)
-        music_path = find_background_music()
-        narration_input_index = len(broll_clips) # O aúdio da narração é o próximo input
-        inputs.extend(["-i", audio_file])
-        
-        if music_path:
-            music_input_index = len(broll_clips) + 1
-            inputs.extend(["-stream_loop", "-1", "-i", music_path])
-            
-            # CONFIGURAÇÃO DE ÁUDIO (SIDECHAIN COMPRESSION)
-            filter_complex += (
-                f";[{narration_input_index}:a]adelay={int(intro_delay*1000)}|{int(intro_delay*1000)},volume=1.8,asplit[narr1][narr2];"
-                f"[{music_input_index}:a]volume=0.3[bgm];"
-                f"[bgm][narr2]sidechaincompress=threshold=0.01:ratio=20:attack=5:release=800[bgm_ducked];"
-                f"[narr1][bgm_ducked]amix=inputs=2:duration=first[a_out]"
-            )
+        m_path = next((os.path.join(AUDIO_DIR, f) for f in os.listdir(AUDIO_DIR) if f.endswith(('.mp3','.wav'))), None)
+        inputs.extend(["-i", audio_file]); master = FFmpegEngine.get_audio_master_filter()
+        if m_path:
+            inputs.extend(["-stream_loop", "-1", "-i", m_path])
+            filter_c += f";[{len(brolls)}:a]adelay=1000|1000,volume=1.8,asplit[n1][n2];[{len(brolls)}+1:a]volume=0.3[bg];[bg][n2]sidechaincompress=threshold=0.01:ratio=20[bgd];[n1][bgd]amix=inputs=2:duration=first,{master}[a_out]"
         else:
-             filter_complex += (
-                f";[{narration_input_index}:a]adelay={int(intro_delay*1000)}|{int(intro_delay*1000)},volume=1.5[a_out]"
-            )
+            filter_c += f";[{len(brolls)}:a]adelay=1000|1000,volume=1.5,{master}[a_out]"
 
-        # 5. Comando Final
-        logger.info(f"🎬 Renderizando v1.5 (Hybrid Mode)...")
-        cmd = ["ffmpeg"] + inputs + [
-            "-filter_complex", filter_complex,
-            "-map", "[v_out]", "-map", "[a_out]",
-            "-c:v", "libx264", "-preset", "superfast", "-crf", "23", "-r", str(VIDEO_FPS),
-            "-c:a", "aac", "-b:a", "192k",
-            "-t", str(video_duration),
-            output_file, "-y"
-        ]
-        
-        subprocess.run(cmd, check=True)
-        
-        # 6. Copiar para Download
-        android_download_path = f"/sdcard/Download/{output_filename}"
-        try:
-            subprocess.run(["cp", output_file, android_download_path], check=True)
-            print(f"\n🚀 ABSOLUTE CINEMA v1.5 (HYBRID) OPERACIONAL!")
-            print(f"🎬 Vídeo: {output_filename}")
-            print(f"📍 Pasta: Downloads do Celular")
-        except:
-            print("\n⚠️ Vídeo salvo em output/ mas não copiado para SDCard.")
-
-    except Exception as e:
-        logger.error(f"❌ Erro Crítico: {e}")
-
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="HOMES Engine v1.5 - Video Maker")
-    parser.add_argument("script", help="Caminho para o arquivo de roteiro (.txt)")
-    parser.add_argument("--theme", default="yellow_punch", help="Tema visual (default, yellow_punch, cyan_future, minimal_box)")
-    
-    args = parser.parse_args()
-    generate_video(args.script, args.theme)
+        subprocess.run(["ffmpeg"] + inputs + ["-filter_complex", filter_c, "-map", "[v_out]", "-map", "[a_out]", "-c:v", "libx264", "-preset", "superfast", "-t", str(v_dur), output_file, "-y"], check=True)
+        return os.path.abspath(output_file)
+    except Exception as e: logger.error(f"Error: {e}"); return None
