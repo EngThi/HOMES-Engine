@@ -1,0 +1,14 @@
+{
+  "task_id": "fd83b1556b18",
+  "type": "finalize_video",
+  "data": {
+    "video_path": "None",
+    "script_path": "scripts/ia_acha_que_v\u00ea_o_mundo_173553.txt",
+    "theme": "minimal_box",
+    "timestamp": "2026-04-01T17:36:23.682446"
+  },
+  "priority": 0,
+  "created_at": "2026-04-01T17:36:23.682636",
+  "status": "pending",
+  "attempts": 0
+}
