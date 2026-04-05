@@ -73,14 +73,32 @@ def generate_video(script_path, theme_name="yellow_punch"):
         logger.info(f"🎬 Renderizando v1.7: {output_filename}")
         subprocess.run(["ffmpeg"] + inputs + ["-filter_complex", filter_c, "-map", "[v_out]", "-map", "[a_out]", "-c:v", "libx264", "-preset", "superfast", "-t", str(v_dur), output_file, "-y"], check=True)
         
-        # 6. Salvar em Downloads do Celular
-        # Tentamos o caminho padrão do Android no Termux
-        android_download = "/sdcard/Download/"
+        # 6. Salvar em Downloads do Celular (v1.7.1 - Reliable Path)
+        android_download = os.path.expanduser("~/storage/downloads/")
         try:
-            subprocess.run(["cp", output_file, f"{android_download}{output_filename}"], check=True)
-            print(f"\n🚀 SUCESSO! Vídeo salvo em Downloads.")
+            destination = os.path.join(android_download, output_filename)
+            subprocess.run(["cp", output_file, destination], check=True)
+            
+            # --- FEEDBACK MOBILE (v1.7.2) ---
+            try:
+                # 1. Notificação Android
+                msg = f"Vídeo renderizado com sucesso: {output_filename}"
+                subprocess.run(["termux-notification", "-t", "HOMES Engine", "-c", msg, "--id", "homes_render"], capture_output=True)
+                
+                # 2. Vibração (Padrão: 200ms on, 100ms off, 200ms on)
+                subprocess.run(["termux-vibrate", "-d", "200"], capture_output=True)
+                
+                # 3. TTS Feedback
+                subprocess.run(["termux-tts-speak", "Renderização concluída."], capture_output=True)
+            except:
+                pass # Silencioso se a API não estiver instalada
+            # -------------------------------
+
+            print(f"\n🚀 SUCESSO! Vídeo enviado para a pasta Downloads.")
+            print(f"📍 Arquivo: {output_filename}")
         except Exception as e:
-            print(f"\n⚠️ Falha ao copiar para Downloads. Verifique permissões: {e}")
+            print(f"\n⚠️ Falha ao copiar para Downloads: {e}")
+            print(f"📂 O vídeo ainda está salvo em: {output_file}")
 
         return os.path.abspath(output_file)
     except Exception as e:

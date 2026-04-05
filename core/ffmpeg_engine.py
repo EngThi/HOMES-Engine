@@ -34,6 +34,14 @@ class FFmpegEngine:
             return False
 
     @staticmethod
+    def get_audio_master_filter() -> str:
+        """
+        Aplica o filtro de normalização de volume (Loudness Normalization)
+        Padrão: EBU R128 (-14 LUFS) para YouTube/Spotify.
+        """
+        return "loudnorm=I=-14:LRA=11:tp=-1.5"
+
+    @staticmethod
     def build_zoompan_filter(index: int, duration: float, fps: int, mode: str = "zoom_in") -> str:
         """
         Cria o efeito Ken Burns (ZoomPan) Cinematográfico.
