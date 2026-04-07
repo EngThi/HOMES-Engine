@@ -7,13 +7,14 @@ from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_MAX_TOKENS, GEMINI_TEMPE
 # Configuração de Logs
 logger = logging.getLogger(__name__)
 
-def generate_script_from_topic(topic: str) -> Optional[str]:
+def generate_script_from_topic(topic: str, style_prompt: str = "") -> Optional[str]:
     """
     Gera um roteiro otimizado para vídeos curtos usando a API do Gemini.
-    
+
     Args:
         topic (str): O tema ou assunto do vídeo.
-        
+        style_prompt (str): Instruções extras de estilo/branding do criador.
+
     Returns:
         Optional[str]: O texto do roteiro gerado ou None em caso de erro.
     """
@@ -23,15 +24,18 @@ def generate_script_from_topic(topic: str) -> Optional[str]:
         return None
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={api_key}"
-    
+
+    # Injetando estilo se houver
+    brand_context = f"\n    [CREATOR STYLE]\n    {style_prompt}\n" if style_prompt else ""
+
     prompt = f"""
     [ROLE]
     Você é um Roteirista Profissional de Vídeos Curtos (Shorts/Reels) estilo "Absolute Cinema".
-    
+    {brand_context}
     [TASK]
     Crie um roteiro EM PORTUGUÊS sobre o tema: "{topic}".
-    
-    [GUIDELINES]
+    ... (rest of the instructions)
+    """
     1. Gancho (0-3s): Uma frase impactante ou pergunta retórica.
     2. Corpo (3-45s): Desenvolvimento rápido, denso e direto.
     3. CTA (Final): Chamada para ação sutil (ex: "Siga para mais").
