@@ -1,7 +1,13 @@
+import os
+import sys
 import requests
 import json
 import logging
 from typing import Optional
+
+# Injetar a raiz do projeto no path para encontrar o config.py
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_MAX_TOKENS, GEMINI_TEMPERATURE
 
 # Configuração de Logs
@@ -10,13 +16,6 @@ logger = logging.getLogger(__name__)
 def generate_script_from_topic(topic: str, style_prompt: str = "") -> Optional[str]:
     """
     Gera um roteiro otimizado para vídeos curtos usando a API do Gemini.
-
-    Args:
-        topic (str): O tema ou assunto do vídeo.
-        style_prompt (str): Instruções extras de estilo/branding do criador.
-
-    Returns:
-        Optional[str]: O texto do roteiro gerado ou None em caso de erro.
     """
     api_key = GEMINI_API_KEY
     if not api_key or "sua_chave" in api_key:
@@ -24,8 +23,7 @@ def generate_script_from_topic(topic: str, style_prompt: str = "") -> Optional[s
         return None
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={api_key}"
-
-    # Injetando estilo se houver
+    
     brand_context = f"\n    [CREATOR STYLE]\n    {style_prompt}\n" if style_prompt else ""
 
     prompt = f"""
@@ -34,8 +32,8 @@ def generate_script_from_topic(topic: str, style_prompt: str = "") -> Optional[s
     {brand_context}
     [TASK]
     Crie um roteiro EM PORTUGUÊS sobre o tema: "{topic}".
-    ... (rest of the instructions)
-    """
+    
+    [GUIDELINES]
     1. Gancho (0-3s): Uma frase impactante ou pergunta retórica.
     2. Corpo (3-45s): Desenvolvimento rápido, denso e direto.
     3. CTA (Final): Chamada para ação sutil (ex: "Siga para mais").
@@ -59,7 +57,6 @@ def generate_script_from_topic(topic: str, style_prompt: str = "") -> Optional[s
         if response.status_code == 200:
             data = response.json()
             generated_text = data['candidates'][0]['content']['parts'][0]['text']
-            # Limpeza básica (remover asteriscos ou formatação markdown se houver)
             clean_text = generated_text.replace("*", "").strip()
             return clean_text
         else:
@@ -76,17 +73,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Gerador de Roteiro AI")
     parser.add_argument("--topic", type=str, required=True, help="Tema do vídeo")
-    parser.add_argument("--out", type=str, required=True, help="Caminho do arquivo de saída")
+    parser.add_argument("--style", type=str, default="", help="Estilo do criador")
     
     args = parser.parse_args()
-    
     logging.basicConfig(level=logging.INFO)
     
-    script = generate_script_from_topic(args.topic)
+    script = generate_script_from_topic(args.topic, args.style)
     if script:
-        with open(args.out, "w", encoding="utf-8") as f:
-            f.write(script)
-        print(f"✅ Roteiro salvo em: {args.out}")
+        print(f"\n--- ROTEIRO GERADO ---\n{script}\n----------------------")
     else:
         print("❌ Falha ao gerar roteiro.")
         sys.exit(1)

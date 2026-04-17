@@ -1,38 +1,31 @@
-# System & Logs
+# System & Python
 __pycache__/
 *.pyc
 *.log
 .DS_Store
 
-# Gemini Agent Context
-GEMINI.md
-FUTURO.md
-
-# Project Specific Assets (Local Only)
+# Project Assets (Local Only)
 output/
 assets/broll/
 assets/*.mp4
 assets/*.mp3
 assets/*.wav
+assets/generated/
 scripts/*.txt
 *.mp3
 *.srt
 *.vtt
+*.ass
 
-# Sensitive / Configuration
-.wakatime-project
-.wakatime.cfg
+# Environment & Secrets
 .env
 .secrets
-# --- FARMING SIMULATION ---
-simulation_output/
-farm_*.py
-auto_coder.py
+.wakatime-project
+.wakatime.cfg
+
+# Internal AI Context & Simulation
 .gemini/
-visual_farmer.py
-farming.log
-video_maker.py
-scripts/editor_helper.py
-simulation_output/
 logs/
-assets/generated/
+
+# Private Tools & Management
+TESTES/

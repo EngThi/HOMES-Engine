@@ -8,7 +8,7 @@ from core.queue_handler import QueueHandler
 from core.branding_loader import BrandingLoader
 
 logger = get_logger(__name__)
-CYAN, GREEN, YELLOW, RED, RESET = "\033[96m", "\033[92m", "\033[91m", "\033[0m"
+CYAN, GREEN, YELLOW, RED, RESET = "\033[96m", "\033[92m", "\033[93m", "\033[91m", "\033[0m"
 
 def clear_screen(): os.system('clear')
 def print_banner(current_brand="default"):
