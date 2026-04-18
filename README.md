@@ -1,81 +1,63 @@
-# 🎥 HOMES Engine - Absolute Cinema Creator
+# HOMES Engine: Absolute Cinema Creator
 
-## 🚀 Quick Start
+HOMES Engine is an automated video production system designed to generate high-quality, branded content directly from mobile environments. Originally conceived as a challenge to traditional desktop-heavy workflows, the project focuses on orchestrating AI scripting, voice synthesis, and complex FFmpeg rendering within restricted hardware.
 
-### Termux (Automático)
-```bash
-bash setup.sh
-```
+## The Vision & History
 
-### Manual
-```bash
-pip install -r requirements.txt
-cp .env.example .env
-nano .env  # Adicionar GEMINI_API_KEY
-python main.py
-```
+The project started with a clear objective: proving that professional-grade media automation doesn't require a workstation. Developed using **Acode** as the primary IDE and **Termux** as the execution environment, HOMES Engine was built by finding workarounds for mobile-specific constraints. 
 
-## ✨ Novidades v3.0 (Absolute Cinema)
-- **🧠 Modular Architecture:** Motor de IA, TTS e FFmpeg isolados em módulos independentes no `core/`.
-- **🎨 Smart Assets:** Geração automática de imagens via **Pollinations.ai (FLUX)** quando o B-Roll é insuficiente.
-- **🎬 Professional FFmpeg Engine:** ZoomPan (Ken Burns), standardização de SAR e mixagem inteligente de áudio.
-- **🛡️ Audit & Security:** Scripts de verificação de segredos e suporte a variáveis de ambiente centralizadas.
-- **📱 Termux Optimized:** Pipeline testado e otimizado para hardware ARM64 com suporte a Voz via Termux API.
+From handling ARM64 architecture limitations to bypassing Android's file system restrictions, every module reflects a "hacker mindset"—optimizing performance where resources are scarce and utilizing system hooks (Termux API) for native features like haptic feedback, notifications, and speech-to-text.
 
-### Primeiro uso:
-1. Digite ou fale um roteiro
-2. Escolha tema
-3. Vídeo renderizado em `output/`
+## Technical Stack
 
----
+The engine is built on a modular Python architecture, ensuring that each component of the pipeline can be scaled or swapped:
 
-## 🛠️ O que é o HOMES Engine?
+- **Core Logic:** Python 3.10+
+- **Video Engine:** FFmpeg (Advanced filter graphs for Ken Burns effects, sidechain compression, and SAR standardization).
+- **Intelligence:** Google Gemini API (Scriptwriting and visual prompting).
+- **Voice (TTS):** Multi-provider support including Edge-TTS, Google TTS, and Gemini-native synthesis.
+- **Environment:** Termux (Android Linux layer) with Termux-API integration.
+- **Branding:** Custom JSON-based branding kits for consistent visual identities (logos, colors, and style prompts).
 
-## ✨ Diferenciais Técnicos
-- **Custo Zero:** Operação baseada em APIs gratuitas e ambientes mobile (Termux).
-- **Integração Termux API:** Entrada de dados via Speech-to-Text e notificações nativas Android.
-- **Foco em Retenção:** Geração de prompts otimizados para o nível "Absolute Cinema".
+## Key Features (v1.8 / v3.0)
 
-## 🛠️ Stack
-- Python 3
-- Termux API (System hooks)
-- Google Gemini 2.5 Flash (via API externa)
+- **Absolute Cinema Engine:** A refined FFmpeg pipeline that handles complex B-roll transitions and dynamic overlays.
+- **Creator Branding Kits:** Support for multiple profiles. Each brand can have its own color palette, style prompts for AI, and signature assets.
+- **Mobile-First Workarounds:** Integrated scripts to handle Android storage paths and system-level notifications upon render completion.
+- **Hybrid Input:** Support for manual text entry, clipboard pasting, or voice commands via STT.
+- **Autonomous Mode:** A specialized mode designed for queue-based processing (integration ready for n8n/webhooks).
 
-## 🚀 Como Rodar
-1. Instale as dependências: `pip install -r requirements.txt`
-2. Garanta acesso à Termux API: `pkg install termux-api`
-3. Execute: `python main.py`
+## Project Structure
 
-# 🚀 Participação no Hackatime (Flavortown)
+- `core/`: The heart of the engine. Contains the video maker, TTS handlers, and branding loaders.
+- `branding/`: Directory for creator profiles (colors, logos, and style guidelines).
+- `assets/`: Local storage for b-rolls, fonts, and generated imagery.
+- `scripts/`: Utility tools for benchmarking system performance and verifying environment secrets.
+- `queue/`: JSON-based system for asynchronous task management.
 
-Este repositório faz parte do evento [Flavortown](https://flavortown.hackclub.com/), uma iniciativa incrível do Hack Club para criadores brilhantes testarem ideias inovadoras, explorarem soluções criativas e compartilharem progresso técnico.
+## Installation & Setup
 
-💡 **Criado durante o Hackatime**
-O projeto foi desenvolvido como parte da competição **Hackatime**, uma maratona dedicada a valorizar o processo criativo e técnico por meio de **devlogs** e **projetos documentados**. A ideia é registrar cada passo do progresso enquanto entregamos soluções reais e experimentamos conceitos novos!
+While optimized for Termux, HOMES Engine can run on any Linux-based system with FFmpeg installed.
 
-🔗 **Saiba mais sobre o evento**
-- [Hackatime no Hack Club](https://hackatime.hackclub.com/)  
-- [Flavortown: Conheça iniciativas como esta](https://flavortown.hackclub.com/)  
+1. **Environment Setup:**
+   ```bash
+   bash setup.sh
+   ```
+2. **Configuration:**
+   Rename `.env.example` to `.env` and add your `GEMINI_API_KEY`.
+3. **Execution:**
+   ```bash
+   python3 main.py
+   ```
 
-Nosso objetivo é experimentar, documentar e contribuir abertamente para a comunidade tech! 🎯  
-## 🏗️ Architecture v3.0 (Absolute Cinema)
+## Development Environment
 
-O sistema agora opera em uma arquitetura modular robusta:
+This project is a testament to mobile development. 
+- **Editor:** Acode (Android Code Editor).
+- **Terminal:** Termux (Linux environment on Android).
+- **Hardware:** Tested on ARM64 mobile devices.
 
-1.  **Core Modules (`core/`)**: Lógica isolada para TTS, Vídeo e IA.
-2.  **Error Handling**: Sistema de retry automático e fallback de serviços.
-3.  **Queue System**: Integração com n8n + Fila Local (JSON) para processamento assíncrono.
-4.  **CLI Interface**: Menu interativo com suporte a comandos de voz e pipeline automático.
-
-### 📊 Benchmark Tool
-
-Para testar se seu Termux aguenta o render:
-
-```bash
-python3 scripts/benchmark_system.py
-```
+The goal remains unchanged: to bridge the gap between simple mobile apps and professional automation tools through surgical code and creative workarounds.
 
 ---
-
-**Desenvolvido com 🤖 + ☕ por Homes Architect**
-
+*Developed during the Hackatime / Flavortown event by the HOMES Architect.*
