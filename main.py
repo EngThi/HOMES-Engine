@@ -1,4 +1,4 @@
-import os, subprocess, sys, time, json, re
+import os, subprocess, sys, time, json, re, argparse
 from datetime import datetime
 from core.video_maker import generate_video
 from core.ai_writer import generate_script_from_topic
@@ -21,15 +21,21 @@ def safe_input(prompt):
     try: return input(prompt).strip()
     except KeyboardInterrupt: print(f"\n\n🛑 {RED}Saindo...{RESET}"); sys.exit()
 
+def run_command(cmd):
+    try:
+        return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+    except Exception:
+        return None
+
 def select_brand_menu():
-    if not os.path.exists("branding"): os.makedirs("branding/default", exist_ok=True)
+    if not os.path.exists("branding"): os.makedirs("branding/demo", exist_ok=True)
     brands = [d for d in os.listdir("branding") if os.path.isdir(os.path.join("branding", d))]
     print_banner()
     print(f"\n{CYAN}👤 SELECIONE SEU PERFIL DE CRIADOR:{RESET}")
     for i, b in enumerate(brands): print(f"{YELLOW}[{i+1}]{RESET} {b}")
     c = safe_input(f"\n👉 Escolha (Número): ")
     try: return brands[int(c)-1]
-    except: return "default"
+    except: return "demo"
 
 def main_menu(brand="default"):
     print_banner(brand)
@@ -43,51 +49,55 @@ def main_menu(brand="default"):
     return safe_input(f"\n{CYAN}👉 Opção:{RESET} ")
 
 def main():
-    current_brand = "default"
+    current_brand = "demo"
     with ErrorContext("HOMES-Engine"):
         validate_config()
         current_brand = select_brand_menu()
         while True:
-            try:
-                choice = main_menu(current_brand)
-                if choice == '0': break
-                if choice == '7': current_brand = select_brand_menu(); continue
-                
-                script_path = ""
-                if choice == '8': # Queuing Mode
-                    topic = safe_input("\n👉 Tema do vídeo: ")
-                    if topic and topic != '0':
-                        print("🧠 Escrevendo roteiro...")
-                        content = generate_script_from_topic(topic)
-                        if content:
-                            filename = f"scripts/{int(time.time())}.pending.txt"
-                            with open(filename, "w") as f: f.write(content)
-                            print(f"✅ Enfileirado: {filename}")
-                            time.sleep(1)
-
-                elif choice == '5': # Immediate
-                    topic = safe_input("\n👉 Tema do vídeo: ")
-                    if topic:
-                        content = generate_script_from_topic(topic)
-                        if content:
-                            script_path = f"scripts/tmp_{int(time.time())}.txt"
-                            with open(script_path, "w") as f: f.write(content)
-
-                elif choice == '4': # Existing
-                    scripts = [f for f in os.listdir("scripts") if f.endswith(".txt")]
-                    for i, s in enumerate(scripts): print(f"{i+1}. {s}")
-                    idx = safe_input("Número: ")
-                    try: script_path = os.path.join("scripts", scripts[int(idx)-1])
-                    except: continue
-
-                if script_path:
-                    print(f"\n{CYAN}🎨 Iniciando v2.2...{RESET}")
-                    generate_video(script_path, brand_name=current_brand)
-                    safe_input("\n[Enter] para voltar ao menu...")
+            choice = main_menu(current_brand)
+            if choice == '0': break
+            if choice == '7': current_brand = select_brand_menu(); continue
             
-            except Exception as e:
-                print(f"\n{RED}❌ Ops! Algo deu errado: {e}{RESET}")
-                time.sleep(2)
+            script_path = ""
+            if choice == '1': 
+                content = run_command("termux-speech-to-text")
+                if not content:
+                    print(f"\n{YELLOW}⚠️ Termux STT não disponível. Digite o seu roteiro abaixo:{RESET}")
+                    content = safe_input("> ")
+                if content:
+                    script_path = f"scripts/voice_{int(time.time())}.txt"
+                    with open(script_path, "w") as f: f.write(content)
+
+            elif choice == '5':
+                topic = safe_input("\n👉 Tema do vídeo: ")
+                if topic:
+                    branding = BrandingLoader(current_brand)
+                    content = generate_script_from_topic(topic, branding.get_style_prompt())
+                    if content:
+                        script_path = f"scripts/ia_{int(time.time())}.txt"
+                        with open(script_path, "w") as f: f.write(content)
+
+            elif choice == '4':
+                scripts = [f for f in os.listdir("scripts") if f.endswith(".txt")]
+                for i, s in enumerate(scripts): print(f"{i+1}. {s}")
+                idx = safe_input("Número: ")
+                try: script_path = os.path.join("scripts", scripts[int(idx)-1])
+                except: continue
+
+            if script_path:
+                print(f"\n{CYAN}🎨 Iniciando Render v2.2...{RESET}")
+                generate_video(script_path, brand_name=current_brand)
+                safe_input("\n[Enter] para continuar...")
 
 if __name__ == "__main__":
-    main()
+    from core.queue_daemon import queue_daemon
+    parser = argparse.ArgumentParser(description="HOMES Engine CLI")
+    parser.add_argument("--daemon", action="store_true", help="Inicia em modo daemon de fila")
+    parser.add_argument("--brand", default="demo", help="Marca para usar no modo daemon")
+    
+    args = parser.parse_args()
+    
+    if args.daemon:
+        queue_daemon()
+    else:
+        main()
