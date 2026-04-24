@@ -1,9 +1,1 @@
-{
-  "name": "demo",
-  "primary_color": "#22c55e",
-  "secondary_color": "#0f172a",
-  "font": "System",
-  "logo_path": "assets/demo_logo.png",
-  "music_path": "assets/demo_bg_music.mp3",
-  "style_prompt": "english tech explainer, calm but energetic, youtube style, short punchy sentences"
-}
+{"name":"demo","style_prompt":"test_cyberpunk"}
