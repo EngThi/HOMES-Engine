@@ -1,1 +1,19 @@
-{"name":"demo","style_prompt":"test_cyberpunk"}
+{
+  "name": "Demo Channel",
+  "niche": "tech",
+  "language": "en",
+  "style_prompt": "Calm, educational YouTube narration. English. Factual and engaging. No filler words.",
+  "voice": "en-US-AriaNeural",
+  "music": null,
+  "logo": null,
+  "colors": {
+    "primary": "#00FF88",
+    "background": "#0A0A0A",
+    "text": "#FFFFFF"
+  },
+  "video": {
+    "resolution": "1080x1920",
+    "fps": 30,
+    "aspect_ratio": "9:16"
+  }
+}
