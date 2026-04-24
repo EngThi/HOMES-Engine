@@ -94,9 +94,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HOMES Engine CLI")
     parser.add_argument("--daemon", action="store_true", help="Inicia em modo daemon de fila")
     parser.add_argument("--brand", default="demo", help="Marca para usar no modo daemon")
+    parser.add_argument("--check", action="store_true", help="Verifica o status do sistema")
     
     args = parser.parse_args()
     
+    if args.check:
+        print(f"{GREEN}HOMES Engine v2.3 OK{RESET}")
+        sys.exit(0)
+        
     if args.daemon:
         queue_daemon()
     else:

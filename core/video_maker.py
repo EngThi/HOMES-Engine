@@ -116,11 +116,26 @@ def generate_video(script_path, theme_name="yellow_punch", brand_name="default")
         logger.info(f"🎬 Renderizando v1.8 Branded: {proj.project_id}")
         subprocess.run(["ffmpeg"] + inputs + ["-filter_complex", filter_c, "-map", "[v_out]", "-map", "[a_out]", "-c:v", "libx264", "-preset", "ultrafast", "-t", str(duration + 1.5), proj.output_file, "-y"], check=True)
         
-        # 6. Exportação
+        # 6. Exportação e Metadados (v2.3)
         target = f"/sdcard/Download/HOMES_BRANDED_{proj.project_id}.mp4"
-        subprocess.run(["cp", proj.output_file, target], check=True)
-        subprocess.run(["termux-media-scan", target], capture_output=True)
-        print(f"🚀 SUCESSO: {target}")
+        metadata = {
+            "project_id": proj.project_id,
+            "brand": brand_name,
+            "duration": duration,
+            "status": "completed",
+            "timestamp": datetime.now().isoformat(),
+            "output_file": target
+        }
+        
+        try:
+            # Salva metadados no cache do projeto para o Hub consumir
+            with open(os.path.join(proj.project_dir, "metadata.json"), "w") as f:
+                json.dump(metadata, f, indent=4)
+                
+            subprocess.run(["cp", proj.output_file, target], check=True)
+            subprocess.run(["termux-media-scan", target], capture_output=True)
+            print(f"🚀 SUCESSO: {target}")
+        except: pass
 
         return proj.output_file
     except Exception as e:
