@@ -61,3 +61,10 @@ The goal remains unchanged: to bridge the gap between simple mobile apps and pro
 
 ---
 *Developed during the Hackatime / Flavortown event by the HOMES Architect.*
+
+### Queue Daemon
+To run the engine as a background worker, consuming pending scripts:
+```bash
+python main.py --daemon
+# drop files as scripts/<brand>_<timestamp>.pending.txt
+```
