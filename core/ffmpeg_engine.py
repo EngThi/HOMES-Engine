@@ -44,34 +44,27 @@ class FFmpegEngine:
     @staticmethod
     def build_zoompan_filter(index: int, duration: float, fps: int, mode: str = "zoom_in") -> str:
         """
-        Cria o efeito Ken Burns (ZoomPan) Cinematográfico.
-        Modos: zoom_in, zoom_out, pan_left, pan_right
+        Cria o efeito Ken Burns (ZoomPan) Cinematográfico com correção de proporção.
         """
         d = int(duration * fps)
-        s = "720x1280" # Resolução vertical para shorts/reels
+        s = "720x1280"
         
-        # Lógica de Movimento de Câmera (Ken Burns 2.0)
+        # Ken Burns 2.0
         if mode == "zoom_in":
             z = "min(zoom+0.0015,1.5)"
-            x = "iw/2-(iw/zoom/2)"
-            y = "ih/2-(ih/zoom/2)"
+            x = "iw/2-(iw/zoom/2)"; y = "ih/2-(ih/zoom/2)"
         elif mode == "zoom_out":
             z = "if(eq(on,0),1.5,max(zoom-0.0015,1))"
-            x = "iw/2-(iw/zoom/2)"
-            y = "ih/2-(ih/zoom/2)"
-        elif mode == "pan_left":
-            z = "1.3"
-            x = f"(1-on/{d})*(iw-iw/zoom)"
-            y = "ih/2-(ih/zoom/2)"
-        else: # pan_right
-            z = "1.3"
-            x = f"(on/{d})*(iw-iw/zoom)"
-            y = "ih/2-(ih/zoom/2)"
+            x = "iw/2-(iw/zoom/2)"; y = "ih/2-(ih/zoom/2)"
+        else: # pan_left/right
+            z = "1.3"; y = "ih/2-(ih/zoom/2)"
+            x = f"(on/{d})*(iw-iw/zoom)" if mode == "pan_right" else f"(1-on/{d})*(iw-iw/zoom)"
 
-        # Color Grading: Aumenta contraste e saturação para o look "Absolute Cinema"
         color_grade = "eq=contrast=1.15:saturation=1.3:brightness=0.02"
         
+        # A MÁGICA: scale + crop para evitar achatamento
         return (
-            f"[{index}:v]scale=2000:-1,zoompan=z='{z}':x='{x}':y='{y}':d={d}:s={s}:fps={fps},"
+            f"[{index}:v]scale=1280:2275:force_original_aspect_ratio=increase,crop=1280:2275,scale=720:1280,"
+            f"zoompan=z='{z}':x='{x}':y='{y}':d={d}:s={s}:fps={fps},"
             f"{color_grade},setsar=1,format=yuv420p,trim=duration={duration},setpts=PTS-STARTPTS[v{index}];"
         )

@@ -1,135 +1,107 @@
-import requests
-import json
-import base64
-import wave
-import re
-import time
-import os
-import logging
-from config import GEMINI_API_KEY
+import requests, json, base64, wave, re, time, os, logging, subprocess
+from config import GEMINI_API_KEY, GEMINI_TTS_MODEL
 
-# Configuração de Logs do Sistema
 logger = logging.getLogger(__name__)
 
 class GeminiTTS:
     def __init__(self, api_key=None):
-        # Usa a chave do config se não for passada explicitamente
         self.api_key = api_key or GEMINI_API_KEY
-        if not self.api_key:
-            logger.error("❌ GEMINI_API_KEY não encontrada!")
-            raise ValueError("API Key é obrigatória para GeminiTTS.")
-            
-        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={self.api_key}"
-        
-        # Lista completa de vozes disponíveis no Gemini 2.5
-        self.VOICES = [
-            "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Leda", "Orus", 
-            "Aoede", "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", 
-            "Algieba", "Despina", "Erinome", "Algenib", "Rasalgethi", "Laomedeia", 
-            "Achernar", "Alnilam", "Schedar", "Gacrux", "Pulcherrima", "Achird", 
-            "Zubenelgenubi", "Vindemiatrix", "Sadachbia", "Sadaltager", "Sulafat"
-        ]
+        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TTS_MODEL}:generateContent?key={self.api_key}"
 
     def generate(self, text, output_path="output.wav", voice="Kore"):
-        """
-        Gera áudio para um único narrador.
-        """
-        logger.info(f"🗣️ Gerando TTS (Voice: {voice}): {text[:50]}...")
-        payload = {
-            "contents": [{
-                "parts": [{"text": text}]
-            }],
-            "generationConfig": {
-                "responseModalities": ["AUDIO"],
-                "speechConfig": {
-                    "voiceConfig": {
-                        "prebuiltVoiceConfig": {
-                            "voiceName": voice
-                        }
-                    }
-                }
-            }
-        }
-        return self._execute_request(payload, output_path)
-
-    def generate_multi_speaker(self, dialogue, output_path="dialogue.wav", speakers_config=None):
-        """
-        Gera áudio com múltiplos personagens.
-        dialogue: String no formato "Nome: fala"
-        speakers_config: Dicionário { "Nome": "Voz" }
-        """
-        if not speakers_config:
-            # Default fallback
-            speakers_config = {"Narrador": "Kore", "Personagem": "Leda"}
-
-        logger.info(f"🗣️👥 Gerando Multi-Speaker TTS: {list(speakers_config.keys())}")
-
-        speaker_configs = []
-        for name, voice in speakers_config.items():
-            speaker_configs.append({
-                "speaker": name,
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": {"voiceName": voice}
-                }
-            })
-
-        payload = {
-            "contents": [{
-                "parts": [{"text": dialogue}]
-            }],
-            "generationConfig": {
-                "responseModalities": ["AUDIO"],
-                "speechConfig": {
-                    "multiSpeakerVoiceConfig": {
-                        "speakerVoiceConfigs": speaker_configs
-                    }
-                }
-            }
-        }
-        return self._execute_request(payload, output_path)
-
-    def _execute_request(self, payload, output_path):
-        retries = 3
-        for i in range(retries):
+        chunks = self._split_text(text, max_chars=300)
+        logger.info(f"🛡️ Iniciando Pipeline Blindado: {len(chunks)} blocos.")
+        temp_files = []
+        
+        for i, chunk in enumerate(chunks):
+            temp_path = f"{output_path}.part{i}.wav"
+            success = False
+            
+            # TENTATIVA 1: IA Cloud (Gemini)
             try:
-                response = requests.post(self.url, json=payload, timeout=60)
+                res = self._generate_chunk(chunk, temp_path, voice)
+                if res: 
+                    temp_files.append(temp_path)
+                    success = True
+            except: pass
+            
+            # TENTATIVA 2: Fallback Local (Termux TTS - Offline)
+            if not success:
+                logger.warning(f"⚠️ IA falhou no bloco {i+1}. Usando TTS Local do Android...")
+                success = self._generate_local_fallback(chunk, temp_path)
+                if success: temp_files.append(temp_path)
+            
+            # TENTATIVA 3: Silêncio (Garantia de não crash)
+            if not success:
+                logger.error(f"❌ Falha total no bloco {i+1}. Gerando silêncio de segurança.")
+                self._generate_silence(temp_path)
+                temp_files.append(temp_path)
+
+            time.sleep(0.5)
+
+        return self._merge_wavs(temp_files, output_path)
+
+    def _generate_local_fallback(self, text, output_path):
+        """Usa a Termux API para gerar áudio offline se a internet cair."""
+        try:
+            # Gera em WAV via termux-tts-speak
+            subprocess.run(["termux-tts-speak", "-f", output_path, text], check=True, capture_output=True)
+            return os.path.exists(output_path)
+        except:
+            return False
+
+    def _generate_silence(self, output_path, duration=2.0):
+        """Gera um arquivo de silêncio para manter o FFmpeg vivo."""
+        try:
+            subprocess.run(["ffmpeg", "-f", "lavfi", "-i", f"anullsrc=r=24000:cl=mono", "-t", str(duration), "-acodec", "pcm_s16le", output_path, "-y"], check=True, capture_output=True)
+            return True
+        except: return False
+
+    def _split_text(self, text, max_chars=300):
+        sentences = re.split(r'(?<=[.!?]) +', text)
+        chunks, current = [], ""
+        for s in sentences:
+            if len(current) + len(s) < max_chars: current += " " + s
+            else:
+                if current: chunks.append(current.strip())
+                current = s
+        if current: chunks.append(current.strip())
+        return [c for c in chunks if c]
+
+    def _generate_chunk(self, text, output_path, voice):
+        payload = {"contents": [{"parts": [{"text": text}]}], "generationConfig": {"responseModalities": ["AUDIO"], "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}}
+        for i in range(2): # Menos retries aqui pois temos o fallback local
+            try:
+                response = requests.post(self.url, json=payload, timeout=20)
                 if response.status_code == 200:
                     data = response.json()
-                    
-                    if 'candidates' not in data or not data['candidates']:
-                        logger.error("❌ API retornou sucesso mas sem candidatos.")
-                        return None
-
-                    part = data['candidates'][0]['content']['parts'][0]['inlineData']
-                    
-                    # Extração do Sample Rate via Regex do MimeType (ex: audio/L16;rate=24000)
-                    sample_rate_match = re.search(r'rate=(\d+)', part['mimeType'])
-                    sample_rate = int(sample_rate_match.group(1)) if sample_rate_match else 24000
-                    
-                    audio_content = base64.b64decode(part['data'])
-                    self._save_wav(audio_content, output_path, sample_rate)
-                    
-                    logger.info(f"✅ Áudio salvo: {output_path} ({sample_rate}Hz)")
-                    return output_path
-                
-                elif response.status_code == 429:
-                    wait_time = 2**i
-                    logger.warning(f"⚠️ Rate Limit (429). Aguardando {wait_time}s...")
-                    time.sleep(wait_time)
-                else:
-                    logger.error(f"❌ Erro API {response.status_code}: {response.text}")
-                    break
-            except Exception as e:
-                logger.error(f"❌ Falha na conexão: {e}")
-                time.sleep(2**i)
+                    if 'candidates' in data and data['candidates']:
+                        part = data['candidates'][0]['content']['parts'][0]['inlineData']
+                        self._save_wav(base64.b64decode(part['data']), output_path, 24000)
+                        return output_path
+                time.sleep(1)
+            except: pass
         return None
 
+    def _merge_wavs(self, files, output_path):
+        if not files: return None
+        data = []
+        params = None
+        for f in files:
+            try:
+                with wave.open(f, 'rb') as w:
+                    if params is None: params = w.getparams()
+                    data.append(w.readframes(w.getnframes()))
+                os.remove(f)
+            except: continue
+        if not data: return None
+        with wave.open(output_path, 'wb') as w:
+            w.setparams(params)
+            for d in data: w.writeframes(d)
+        return output_path
+
     def _save_wav(self, pcm_data, filename, sample_rate):
-        # Garante que o diretório existe
         os.makedirs(os.path.dirname(filename) or '.', exist_ok=True)
-        
         with wave.open(filename, 'wb') as wav_file:
-            wav_file.setnchannels(1)  # Mono
-            wav_file.setsampwidth(2) # 16-bit
-            wav_file.setframerate(sample_rate)
+            wav_file.setnchannels(1); wav_file.setsampwidth(2); wav_file.setframerate(sample_rate)
             wav_file.writeframes(pcm_data)

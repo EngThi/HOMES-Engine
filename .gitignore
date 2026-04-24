@@ -29,3 +29,8 @@ logs/
 
 # Private Tools & Management
 TESTES/
+
+# Branding Assets (Local Only)
+branding/*/broll_folder/
+branding/*/logo.png
+branding/*/signature_music.mp3

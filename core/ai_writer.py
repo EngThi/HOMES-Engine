@@ -80,7 +80,7 @@ if __name__ == "__main__":
     
     script = generate_script_from_topic(args.topic, args.style)
     if script:
-        print(f"\n--- ROTEIRO GERADO ---\n{script}\n----------------------")
+        # Retorna APENAS o texto para que o redirecionamento > funcione perfeitamente
+        print(script)
     else:
-        print("❌ Falha ao gerar roteiro.")
         sys.exit(1)
