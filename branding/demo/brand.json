@@ -1,19 +1,28 @@
 {
-  "name": "Demo Channel",
-  "niche": "tech",
-  "language": "en",
-  "style_prompt": "Calm, educational YouTube narration. English. Factual and engaging. No filler words.",
-  "voice": "en-US-AriaNeural",
-  "music": null,
-  "logo": null,
-  "colors": {
-    "primary": "#00FF88",
-    "background": "#0A0A0A",
-    "text": "#FFFFFF"
+  "name": "Absolute Cinema",
+  "niche": "history_tech_mystery",
+  "language": "en-US",
+  "style_prompt": "Dark cinematic photography, dramatic lighting, photorealistic, 8k, vertical 9:16, moody color grading, film grain",
+  "voice": "Kore",
+  "voice_speed": 1.05,
+  "color_grade": {
+    "contrast": 1.2,
+    "saturation": 1.1,
+    "brightness": -0.03,
+    "vignette": true
   },
-  "video": {
-    "resolution": "1080x1920",
-    "fps": 30,
-    "aspect_ratio": "9:16"
+  "captions": {
+    "font": "Montserrat-Bold",
+    "size": 22,
+    "color": "white",
+    "outline_color": "black",
+    "outline_width": 3,
+    "highlight_color": "#FFD700"
+  },
+  "music": {
+    "file": "signature_music.mp3",
+    "volume": 0.18,
+    "fade_in": 1.5,
+    "fade_out": 2.0
   }
 }
