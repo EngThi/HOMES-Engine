@@ -9,6 +9,8 @@
     pkgs.python311Packages.virtualenv
     pkgs.python311Packages.requests
     pkgs.python311Packages.python-dotenv
+    pkgs.python311Packages.pytest
+    pkgs.python311Packages.edge-tts
     pkgs.ffmpeg
     pkgs.stdenv.cc.cc.lib
     pkgs.libGL
