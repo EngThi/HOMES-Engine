@@ -85,7 +85,8 @@ TTS_GENDER = "NEUTRAL"
 TTS_ENGINE = "gemini" # Opções: "edge" (com legendas perfeitas), "gemini" (voz superior, legendas estimadas)
 
 # ===== AI SETTINGS =====
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
 GEMINI_MAX_TOKENS = 2048
 GEMINI_TEMPERATURE = 0.7
 

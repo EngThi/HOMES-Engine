@@ -1,127 +1,163 @@
-import os, subprocess, sys, logging, random, re, math
+import os, sys, logging, random, json
 from datetime import datetime
 from typing import List, Optional
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from config import VIDEO_FPS, OUTPUT_DIR, ASSETS_DIR, SCRIPTS_DIR, TTS_ENGINE
 from core.ffmpeg_engine import FFmpegEngine
 from core.gemini_tts import GeminiTTS
 from core.subtitle_utils import generate_ass_from_text
 from core.branding_loader import BrandingLoader
+from core.image_gen import ImageGenerator
+from core.videolm_client import assemble_via_videolm
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-BROLL_DIR = os.path.join(ASSETS_DIR, "broll")
-AUDIO_DIR = os.path.join(ASSETS_DIR, "audio")
-RENDER_DIR = os.path.join(OUTPUT_DIR, "renders")
-CACHE_DIR = os.path.join(OUTPUT_DIR, "cache")
+BROLL_DIR  = os.path.join(ASSETS_DIR, "broll")
+AUDIO_DIR  = os.path.join(ASSETS_DIR, "audio")
+RENDER_DIR = os.path.join(OUTPUT_DIR,  "renders")
+CACHE_DIR  = os.path.join(OUTPUT_DIR,  "cache")
 
-def get_dynamic_broll_sequence(target_duration: float, branding: Optional[BrandingLoader] = None, clip_duration: float = 4.0) -> List[str]:
-    """Seleciona clipes priorizando a pasta de branding do usuário."""
-    files = []
-    
-    # 1. Tentar arquivos do Criador
-    if branding:
-        brand_broll = branding.get_broll_folder()
-        if os.path.exists(brand_broll):
-            files = [os.path.join(brand_broll, f) for f in os.listdir(brand_broll) if f.endswith('.mp4')]
-            logger.info(f"📂 Encontrados {len(files)} clipes de branding.")
 
-    # 2. Fallback para banco geral se necessário
-    if not files:
-        files = [os.path.join(BROLL_DIR, f) for f in os.listdir(BROLL_DIR) if f.endswith('.mp4')]
-    
-    if not files:
-        return [os.path.join(ASSETS_DIR, "background.mp4")]
+class VideoProject:
+    def __init__(self, script_path: str, brand_name: str = "default"):
+        self.timestamp   = datetime.now().strftime("%H%M%S")
+        self.script_name = Path(script_path).stem.replace(".pending", "")
+        self.project_id  = f"{self.script_name}_{self.timestamp}"
+        self.project_dir = os.path.join(CACHE_DIR, self.project_id)
+        os.makedirs(self.project_dir, exist_ok=True)
+        self.audio_file  = os.path.join(self.project_dir, "narration.wav")
+        self.subs_file   = os.path.join(self.project_dir, "subtitles.ass")
+        self.output_file = os.path.join(RENDER_DIR, f"HOMES_{self.project_id}.mp4")
 
-    num_clips = math.ceil(target_duration / clip_duration)
-    return [random.choice(files) for _ in range(num_clips)]
 
-def generate_video(script_path, theme_name="yellow_punch", brand_name="default"):
-    """v1.8: Creator Branding Kit - Logo, Colors & Prioritized B-Roll"""
-    os.makedirs(RENDER_DIR, exist_ok=True)
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    
-    # Carregar Branding
+def generate_video(
+    script_path: str,
+    theme_name:  str = "yellow_punch",
+    brand_name:  str = "default",
+) -> Optional[str]:
+    """
+    Pipeline principal — Engine como orquestrador, VideoLM como renderizador.
+
+    Estágios:
+        1. Carrega roteiro
+        2. Gemini TTS  → narration.wav
+        3. Legenda ASS (local, para referência)
+        4. Gera imagens de cena em paralelo (Gemini → Pollinations fallback)
+        5. Delega montagem FFmpeg ao VideoLM via videolm_client
+        6. Copia .mp4 final para output/renders e salva metadata.json
+    """
+    proj     = VideoProject(script_path, brand_name)
     branding = BrandingLoader(brand_name)
-    brand_config = branding.config
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    script_name = os.path.basename(script_path).replace(".txt", "")
-    output_filename = f"HOMES_v1.8_{timestamp}.mp4"
-    output_file = os.path.join(RENDER_DIR, output_filename)
-    audio_file = os.path.join(CACHE_DIR, f"{script_name}_audio.wav")
-    subs_file = os.path.join(CACHE_DIR, f"{script_name}_subs.ass")
+    brand_cfg   = branding.get_config() if hasattr(branding, "get_config") else {}
+    brand_style = branding.get_style_prompt()
 
     try:
-        with open(script_path, 'r', encoding='utf-8') as f:
+        # ---- 1. Roteiro ----
+        with open(script_path, "r", encoding="utf-8") as f:
             content = f.read().strip()
-            
-        # 1. Áudio & Legendas (v1.8 usa cores do Brand)
-        if TTS_ENGINE == "gemini":
-            GeminiTTS().generate(content, audio_file, voice="Kore")
-        else:
-            audio_file = audio_file.replace(".wav", ".mp3")
-            subprocess.run(["edge-tts", "--text", content, "--write-media", audio_file, "--voice", "pt-BR-AntonioNeural"], check=True)
-        
-        duration = FFmpegEngine.get_duration(audio_file)
-        
-        # Puxa cor de destaque do branding ou amarelo padrão
-        highlight_color = brand_config.get("primary", "#FFD700")
-        generate_ass_from_text(content, duration, subs_file) 
-        
-        v_dur = duration + 2.0
-        
-        # 2. B-Roll Prioritário
-        brolls = get_dynamic_broll_sequence(v_dur, branding=branding)
-        
-        # 3. FFmpeg Chain
-        inputs, filter_c = [], ""
-        for i, b in enumerate(brolls):
-            inputs.extend(["-i", b])
-            filter_c += FFmpegEngine.build_zoompan_filter(i, 4.0, 30, random.choice(["zoom_in", "zoom_out"]))
-        
-        filter_c += "".join([f"[v{i}]" for i in range(len(brolls))]) + f"concat=n={len(brolls)}:v=1:a=0[v_base];"
-        
-        # Overlay do Logo se existir
-        logo_path = branding.get_asset_path("logo.png")
-        if logo_path:
-            logo_idx = len(brolls) + 2 # Índice após áudio e música
-            inputs.extend(["-i", logo_path])
-            filter_c += f"[v_base][{logo_idx}:v]overlay=W-w-20:20[v_logo];"
-            v_final_node = "[v_logo]"
-        else:
-            v_final_node = "[v_base]"
 
-        filter_c += f"{v_final_node}eq=contrast=1.1:saturation=1.2,vignette='PI/4'[v_gr];[v_gr]ass={subs_file.replace(':','\\\\:')}[v_out]"
-        
-        # 4. Audio & Music
-        # Tenta música de assinatura do branding
-        m_path = branding.get_asset_path("signature_music.mp3") or next((os.path.join(AUDIO_DIR, f) for f in os.listdir(AUDIO_DIR) if f.endswith(('.mp3','.wav'))), None)
-        
-        inputs.extend(["-i", audio_file])
-        master = FFmpegEngine.get_audio_master_filter()
-        
-        if m_path:
-            inputs.extend(["-stream_loop", "-1", "-i", m_path])
-            filter_c += f";[{len(brolls)}:a]adelay=1000|1000,volume=1.8,asplit[n1][n2];[{len(brolls)}+1:a]volume=0.3[bg];[bg][n2]sidechaincompress=threshold=0.01:ratio=20[bgd];[n1][bgd]amix=inputs=2:duration=first,{master}[a_out]"
-        else:
-            filter_c += f";[{len(brolls)}:a]adelay=1000|1000,volume=1.5,{master}[a_out]"
+        if not content:
+            logger.error("❌ Script vazio")
+            return None
 
-        # 5. Render
-        logger.info(f"🎬 Renderizando v1.8 (Branded): {output_filename}")
-        subprocess.run(["ffmpeg"] + inputs + ["-filter_complex", filter_c, "-map", "[v_out]", "-map", "[a_out]", "-c:v", "libx264", "-preset", "superfast", "-t", str(v_dur), output_file, "-y"], check=True)
-        
-        # 6. Salvamento
-        android_download = os.path.expanduser("~/storage/downloads/")
-        try:
-            subprocess.run(["cp", output_file, os.path.join(android_download, output_filename)], check=True)
-            subprocess.run(["termux-notification", "-t", "HOMES v1.8", "-c", f"Render Branded Finalizado!"], capture_output=True)
-        except: pass
+        # ---- 2. TTS ----
+        logger.info(f"🎙️  TTS → {proj.audio_file}")
+        voice = brand_cfg.get("voice", "Kore")
+        GeminiTTS().generate(content, proj.audio_file, voice=voice)
 
-        return os.path.abspath(output_file)
+        if not os.path.exists(proj.audio_file):
+            logger.error("❌ Falha no TTS — arquivo de áudio não gerado")
+            return None
+
+        duration = FFmpegEngine.get_duration(proj.audio_file)
+        logger.info(f"⏱️  Duração do áudio: {duration:.1f}s")
+
+        # ---- 3. Legendas locais (para debug / fallback) ----
+        generate_ass_from_text(content, duration, proj.subs_file, start_offset=1.0)
+
+        # ---- 4. Geração de imagens ----
+        sentences = [s.strip() for s in content.split(".") if len(s.strip()) > 10]
+        logger.info(f"🖼️  Gerando {len(sentences)} imagens de cena...")
+
+        def generate_scene_image(args):
+            i, sentence = args
+            img_name = f"scene_{i}.jpg"
+            prompt   = (
+                f"Cinematic vertical photography, {sentence[:120]}, "
+                f"{brand_style}, photorealistic, 8k, 9:16 aspect ratio, "
+                "dramatic lighting, no text, no watermarks"
+            )
+            result = ImageGenerator.generate_image(prompt, img_name)
+            if result:
+                dest = os.path.join(proj.project_dir, img_name)
+                os.replace(result, dest)
+                return dest
+            return None
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            scene_assets = [
+                r for r in executor.map(generate_scene_image, enumerate(sentences))
+                if r is not None
+            ]
+
+        if not scene_assets:
+            logger.error("❌ Nenhuma imagem gerada — pipeline abortado")
+            return None
+
+        logger.info(f"✅ {len(scene_assets)}/{len(sentences)} imagens prontas")
+
+        # ---- 5. Delega renderização ao VideoLM ----
+        bg_music_id = (
+            brand_cfg.get("music", {}).get("file", "")
+            if isinstance(brand_cfg.get("music"), dict)
+            else ""
+        )
+
+        os.makedirs(RENDER_DIR, exist_ok=True)
+
+        logger.info("🚀 Enviando para VideoLM...")
+        output_path = assemble_via_videolm(
+            audio_path   = proj.audio_file,
+            image_paths  = scene_assets,
+            script       = content,
+            project_id   = proj.project_id,
+            bg_music_id  = bg_music_id,
+            output_dir   = RENDER_DIR,
+        )
+
+        if not output_path:
+            logger.error("❌ VideoLM não retornou vídeo")
+            return None
+
+        # ---- 6. Metadata ----
+        metadata = {
+            "project_id":  proj.project_id,
+            "brand":       brand_name,
+            "duration":    duration,
+            "scenes":      len(scene_assets),
+            "status":      "completed",
+            "timestamp":   datetime.now().isoformat(),
+            "output_file": output_path,
+            "engine":      "VideoLM",
+        }
+        with open(os.path.join(proj.project_dir, "metadata.json"), "w") as f:
+            json.dump(metadata, f, indent=4)
+
+        logger.info(f"🎬 CONCLUÍDO → {output_path}")
+        return output_path
+
     except Exception as e:
-        logger.error(f"Erro Crítico: {e}")
+        logger.error(f"🔥 Erro no pipeline: {e}", exc_info=True)
         return None
 
+
 if __name__ == "__main__":
-    generate_video(sys.argv[1])
+    if len(sys.argv) > 1:
+        generate_video(sys.argv[1])
+    else:
+        print("Uso: python core/video_maker.py <caminho_do_script.txt>")
