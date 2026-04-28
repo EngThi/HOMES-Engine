@@ -37,6 +37,6 @@ def list_modules() -> list:
 
 
 # Auto-importa todos os módulos para registrar
-from core.modules import study_planner    # noqa: E402,F401
-from core.modules import daily_brief      # noqa: E402,F401
-from core.modules import finance_tracker  # noqa: E402,F401
+from core.modules import trend_intelligence    # noqa: E402,F401
+from core.modules import skill_tree             # noqa: E402,F401
+from core.modules import rev_ops                # noqa: E402,F401

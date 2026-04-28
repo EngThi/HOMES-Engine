@@ -1,0 +1,18 @@
+{
+  "user": "Thiago (EngThi)",
+  "goals": {
+    "career": ["Estágio Google/Meta", "NestJS", "Python Data Eng", "Cloud Architecture"],
+    "business": ["Canal Faceless YouTube", "Nicho: Tech Explainer", "Meta: $1000/month"]
+  },
+  "preferences": {
+    "rss_feeds": [
+      "https://hnrss.org/frontpage",
+      "http://feeds.feedburner.com/TechCrunch/"
+    ],
+    "target_language": "EN-US"
+  },
+  "apis": {
+    "youtube_handle": "@tech_homes",
+    "github_user": "EngThi"
+  }
+}

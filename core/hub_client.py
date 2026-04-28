@@ -19,6 +19,10 @@ import platform
 import shutil
 import requests
 from typing import Optional
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente do .env
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +70,9 @@ def report_job_done(job_id: str, video_path: str) -> bool:
         "timestamp": time.time(),
     }
     try:
+        # Corrigido para /api/projects/ conforme o guia
         r = requests.post(
-            f"{HUB_BASE}/api/project/{job_id}/complete",
+            f"{HUB_BASE}/api/projects/{job_id}/complete",
             json=payload,
             headers=_signed_headers(payload),
             timeout=10,

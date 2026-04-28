@@ -1,7 +1,7 @@
 python-dotenv
 requests
 edge-tts
-google-generativeai
+google-genai
 ffmpeg-python
 pytest
 pillow

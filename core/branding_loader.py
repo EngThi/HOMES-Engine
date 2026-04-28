@@ -6,11 +6,23 @@ logger = logging.getLogger(__name__)
 
 class BrandingLoader:
     def __init__(self, brand_name="default"):
-        self.brand_path = os.path.join("branding", brand_name)
+        self.brand_name = brand_name or "default"
+        self.brand_path = os.path.join("branding", self.brand_name)
+        
+        # Fallback para demo se a pasta não existir
+        if not os.path.exists(self.brand_path):
+            logger.warning(f"[HOMES] Brand '{self.brand_name}' não encontrada, usando 'demo'.")
+            self.brand_name = "demo"
+            self.brand_path = os.path.join("branding", "demo")
+            
         self.config = self._load_config()
 
     def _load_config(self):
         config_file = os.path.join(self.brand_path, "brand_colors.json")
+        # Também tenta brand.json (conforme patch.py)
+        if not os.path.exists(config_file):
+            config_file = os.path.join(self.brand_path, "brand.json")
+            
         if os.path.exists(config_file):
             with open(config_file, "r") as f:
                 try:

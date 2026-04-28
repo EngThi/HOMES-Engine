@@ -1,106 +1,94 @@
 import time
-import requests
-import json
-import os
 import logging
 import sys
+import os
 
-# Injetar a raiz do projeto no path para encontrar o config.py
+# Injetar a raiz do projeto no path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import SCRIPTS_DIR, GEMINI_API_KEY
+from core import hub_client
 from core.video_maker import generate_video
+from config import SCRIPTS_DIR
 
 # Configuração de Logger
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - [POLLER] %(message)s',
+    format='%(asctime)s - %(levelname)s - [HUB-INTEGRATION] %(message)s',
     datefmt='%H:%M:%S'
 )
 logger = logging.getLogger(__name__)
 
-# Configurações do Backend
-BACKEND_URL = "http://localhost:3000"
-POLL_INTERVAL = 5  # Segundos
+POLL_INTERVAL = 10  # Conforme guia (5-10s)
 
-def get_pending_job():
-    """Consulta a API por novos trabalhos."""
-    try:
-        response = requests.get(f"{BACKEND_URL}/api/project/pending", timeout=5)
-        if response.status_code == 200:
-            return response.json()
-    except requests.exceptions.ConnectionError:
-        logger.warning("Backend offline. Tentando reconectar...")
-    except Exception as e:
-        logger.error(f"Erro ao buscar job: {e}")
-    return None
-
-def report_completion(job_id, video_path):
-    """Notifica o backend que o trabalho terminou."""
-    payload = {
-        "id": job_id,
-        "video_path": str(video_path),
-        "status": "completed",
-        "timestamp": time.time()
-    }
-    try:
-        requests.post(f"{BACKEND_URL}/api/project/{job_id}/complete", json=payload)
-        logger.info(f"✅ Job #{job_id} sincronizado com sucesso!")
-    except Exception as e:
-        logger.error(f"❌ Falha ao reportar conclusão: {e}")
-
-def process_job(job):
-    """Orquestra a execução do job."""
+def process_job(job: dict):
+    """Executa o Job vindo do Hub."""
     job_id = job.get('id')
-    logger.info(f"🚀 Iniciando Job #{job_id}: {job.get('topic')}")
-    
-    # 1. Salvar Script Temporário
-    script_content = job.get('script')
-    if not script_content:
-        logger.error("Job sem script!")
+    topic  = job.get('topic', 'Untitled')
+    script = job.get('script')
+    theme  = job.get('theme', 'default')
+
+    logger.info(f"🚀 Job Recebido: #{job_id} | Tópico: {topic}")
+
+    if not script:
+        logger.error(f"❌ Job #{job_id} não possui script. Cancelando.")
+        hub_client.report_job_error(job_id, "Missing script content")
         return
 
-    filename = f"job_{job_id}.txt"
-    script_path = os.path.join(SCRIPTS_DIR, filename)
-    
+    # 1. Salvar Script para o Engine
+    script_filename = f"hub_{job_id}.txt"
+    script_path = os.path.join(SCRIPTS_DIR, script_filename)
     with open(script_path, "w", encoding="utf-8") as f:
-        f.write(script_content)
-    
-    # 2. Renderizar Vídeo (Chama o Engine)
-    try:
-        theme = job.get('theme', 'yellow_punch')
-        # Nota: generate_video atualmente não retorna o path, vamos assumir baseado no log
-        # Em produção, o video_maker deveria retornar o path.
-        # Vamos rodar e capturar erros.
-        generate_video(script_path, theme_name=theme)
-        
-        # Heurística para achar o vídeo (já que o video_maker joga no output)
-        # Em um refactor futuro, generate_video deve retornar o path exato.
-        logger.info("Renderização finalizada (supostamente).")
-        
-        return "caminho_simulado_para_video.mp4" # Placeholder para o mock
-    except Exception as e:
-        logger.error(f"Falha na renderização: {e}")
-        return None
+        f.write(script)
 
-def start_worker():
-    print(f"👷 HOMES-Engine Worker Iniciado")
-    print(f"🔌 Conectado a: {BACKEND_URL}")
-    print("--------------------------------")
+    # 2. Renderizar (Absolute Cinema v3.0)
+    try:
+        logger.info(f"🎬 Iniciando Renderização Local (Marca: {theme})...")
+        video_path = generate_video(script_path, brand_name=theme)
+        
+        if video_path and os.path.exists(video_path):
+            logger.info(f"✅ Render concluído: {video_path}")
+            # 3. Reportar ao Hub com Assinatura HMAC (automático via hub_client)
+            if hub_client.report_job_done(job_id, video_path):
+                logger.info(f"📡 Hub sincronizado: Job #{job_id} marcado como COMPLETED.")
+            else:
+                logger.error(f"📡 Falha na sincronização: Hub não aceitou a conclusão do Job #{job_id}.")
+        else:
+            hub_client.report_job_error(job_id, "Render failed to produce output file")
+            
+    except Exception as e:
+        logger.error(f"💥 Erro Crítico no Engine: {e}")
+        hub_client.report_job_error(job_id, str(e))
+
+def main_loop():
+    logger.info("🎬 HOMES-Engine Poller Ativo (v3.0 Integration)")
+    logger.info(f"🔗 Hub Base: {os.getenv('HOMES_HUB_URL')}")
+    
+    # Check inicial de saúde
+    if not hub_client.hub_is_alive():
+        logger.warning("⚠️  Hub parece offline. Verifique a URL do Cloudflare.")
+
+    last_telemetry = 0
     
     while True:
-        job = get_pending_job()
-        
+        # A. Polling de Jobs (Passo 1 do Guia)
+        job = hub_client.fetch_pending_job()
         if job:
-            video_path = process_job(job)
-            if video_path:
-                report_completion(job['id'], video_path)
-        else:
-            # Heartbeat discreto
-            # print(".", end="", flush=True) 
-            pass
-            
+            process_job(job)
+        
+        # B. Telemetria de Saúde (A cada 30 segundos ou quando ocioso)
+        if time.time() - last_telemetry > 30:
+            hub_client.push_telemetry()
+            last_telemetry = time.time()
+
+        # C. Comandos Remotos
+        commands = hub_client.poll_commands()
+        for cmd in commands:
+            hub_client.execute_command(cmd)
+
         time.sleep(POLL_INTERVAL)
 
 if __name__ == "__main__":
-    start_worker()
+    try:
+        main_loop()
+    except KeyboardInterrupt:
+        logger.info("Stopping Engine Poller...")

@@ -85,14 +85,19 @@ def main():
 
 if __name__ == "__main__":
     from core.queue_daemon import queue_daemon
+    from integration.queue_poller import main_loop as hub_poller
+    import argparse
+    
     parser = argparse.ArgumentParser(description="HOMES Engine CLI")
-    parser.add_argument("--daemon", action="store_true", help="Inicia em modo daemon de fila")
-    parser.add_argument("--brand", default="demo", help="Marca para usar no modo daemon")
-    parser.add_argument("--check", action="store_true", help="Verifica o status do sistema")
+    parser.add_argument("--daemon", action="store_true", help="Inicia em modo daemon (Fila local)")
+    parser.add_argument("--hub", action="store_true", help="Inicia em modo integração com o Hub")
+    parser.add_argument("--brand", default="demo", help="Marca padrão")
     
     args = parser.parse_args()
-    if args.check:
-        print(f"{GREEN}HOMES Engine v3.0 OK{RESET}")
-        sys.exit(0)
-    if args.daemon: queue_daemon()
-    else: main()
+    
+    if args.hub:
+        hub_poller()
+    elif args.daemon:
+        queue_daemon()
+    else:
+        main()
