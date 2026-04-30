@@ -1,4 +1,4 @@
-import os, sys, logging, random, json
+import os, sys, logging, random, json, math, shutil, subprocess
 from datetime import datetime
 from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor
@@ -22,6 +22,11 @@ AUDIO_DIR  = os.path.join(ASSETS_DIR, "audio")
 RENDER_DIR = os.path.join(OUTPUT_DIR,  "renders")
 CACHE_DIR  = os.path.join(OUTPUT_DIR,  "cache")
 
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+VIDEO_EXTS = {".mp4", ".mov", ".webm", ".mkv"}
+TARGET_SCENE_SECONDS = 6.0
+MAX_VIDEOLM_IMAGES = 100
+
 
 class VideoProject:
     def __init__(self, script_path: str, brand_name: str = "default"):
@@ -33,6 +38,72 @@ class VideoProject:
         self.audio_file  = os.path.join(self.project_dir, "narration.wav")
         self.subs_file   = os.path.join(self.project_dir, "subtitles.ass")
         self.output_file = os.path.join(RENDER_DIR, f"HOMES_{self.project_id}.mp4")
+
+
+def _sentence_chunks(content: str) -> List[str]:
+    chunks = [s.strip() for s in content.replace("\n", " ").split(".") if len(s.strip()) > 10]
+    if chunks:
+        return chunks
+    words = content.split()
+    return [" ".join(words[i:i + 24]) for i in range(0, len(words), 24) if words[i:i + 24]]
+
+
+def _target_scene_count(duration: float, content: str) -> int:
+    sentence_count = max(1, len(_sentence_chunks(content)))
+    cadence_count = max(1, math.ceil(duration / TARGET_SCENE_SECONDS))
+    return min(MAX_VIDEOLM_IMAGES, max(sentence_count, cadence_count))
+
+
+def _media_duration(path: str) -> float:
+    try:
+        result = subprocess.check_output(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
+            stderr=subprocess.DEVNULL,
+        )
+        return max(0.1, float(result.strip()))
+    except Exception:
+        return 1.0
+
+
+def _broll_assets() -> List[str]:
+    if not os.path.isdir(BROLL_DIR):
+        return []
+    assets = []
+    for name in sorted(os.listdir(BROLL_DIR)):
+        path = os.path.join(BROLL_DIR, name)
+        ext = Path(path).suffix.lower()
+        if os.path.isfile(path) and ext in IMAGE_EXTS.union(VIDEO_EXTS):
+            assets.append(path)
+    return assets
+
+
+def _extract_broll_frame(video_path: str, dest_path: str, scene_index: int, total_scenes: int) -> Optional[str]:
+    duration = _media_duration(video_path)
+    spread = (scene_index + 1) / max(2, total_scenes + 1)
+    timestamp = min(max(0.2, duration * spread), max(0.2, duration - 0.2))
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-ss", f"{timestamp:.2f}",
+        "-i", video_path,
+        "-frames:v", "1",
+        "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1",
+        dest_path,
+    ]
+    try:
+        subprocess.run(cmd, check=True)
+        return dest_path if os.path.exists(dest_path) and os.path.getsize(dest_path) > 1000 else None
+    except Exception as e:
+        logger.warning(f"⚠️ Falha extraindo b-roll {video_path}: {e}")
+        return None
+
+
+def _copy_broll_image(image_path: str, dest_path: str) -> Optional[str]:
+    try:
+        shutil.copyfile(image_path, dest_path)
+        return dest_path
+    except Exception as e:
+        logger.warning(f"⚠️ Falha copiando b-roll {image_path}: {e}")
+        return None
 
 
 def generate_video(
@@ -97,30 +168,52 @@ def generate_video(
             start_offset=1.0
         )
 
-        # ---- 4. Geração de imagens ----
-        sentences = [s.strip() for s in content.split(".") if len(s.strip()) > 10]
-        logger.info(f"🖼️  Gerando {len(sentences)} imagens de cena...")
+        # ---- 4. Cenas visuais ----
+        sentences = _sentence_chunks(content)
+        target_scenes = _target_scene_count(duration, content)
+        broll_assets = _broll_assets()
+        logger.info(
+            f"🖼️  Preparando {target_scenes} cenas visuais "
+            f"({len(broll_assets)} b-roll assets disponíveis)"
+        )
 
         img_gen = ImageGenerator()
 
-        def generate_scene_image(args):
-            i, sentence = args
-            img_name = f"scene_{i}.jpg"
-            prompt   = (
-                f"Cinematic vertical photography, {sentence[:120]}, "
-                f"{brand_style}, photorealistic, 8k, 9:16 aspect ratio, "
-                "dramatic lighting, no text, no watermarks"
+        def generate_scene_image(i: int):
+            sentence = sentences[i % len(sentences)]
+            img_name = f"scene_{i:03d}.jpg"
+            dest = os.path.join(proj.project_dir, img_name)
+            prompt = (
+                f"Cinematic editorial scene, {sentence[:180]}, "
+                f"{brand_style}, vertical 9:16, strong composition, no text, no watermark"
             )
+
+            # Intercala title cards locais com b-roll extraído de vídeos/imagens.
+            # Isso evita depender de uma chamada externa de imagem a cada poucos segundos.
+            if broll_assets and i % 5 != 0:
+                source = broll_assets[i % len(broll_assets)]
+                ext = Path(source).suffix.lower()
+                if ext in VIDEO_EXTS:
+                    result = _extract_broll_frame(source, dest, i, target_scenes)
+                else:
+                    result = _copy_broll_image(source, dest)
+                if result:
+                    return result
+
+            result = img_gen._create_local_fallback(prompt, img_name, 720, 1280)
+            if result:
+                shutil.move(result, dest)
+                return dest
+
             result = img_gen.generate(prompt, img_name)
             if result:
-                dest = os.path.join(proj.project_dir, img_name)
-                os.replace(result, dest)
+                shutil.move(result, dest)
                 return dest
             return None
 
         with ThreadPoolExecutor(max_workers=4) as executor:
             scene_assets = [
-                r for r in executor.map(generate_scene_image, enumerate(sentences))
+                r for r in executor.map(generate_scene_image, range(target_scenes))
                 if r is not None
             ]
 
@@ -128,7 +221,7 @@ def generate_video(
             logger.error("❌ Nenhuma imagem gerada — pipeline abortado")
             return None
 
-        logger.info(f"✅ {len(scene_assets)}/{len(sentences)} imagens prontas")
+        logger.info(f"✅ {len(scene_assets)}/{target_scenes} cenas prontas")
 
         # ---- 5. Renderização (VideoLM com Fallback Local) ----
         bg_music_id = (
@@ -185,6 +278,8 @@ def generate_video(
             "brand":       brand_name,
             "duration":    duration,
             "scenes":      len(scene_assets),
+            "target_scene_seconds": TARGET_SCENE_SECONDS,
+            "broll_assets_available": len(broll_assets),
             "status":      "completed",
             "timestamp":   datetime.now().isoformat(),
             "output_file": output_path,

@@ -1,6 +1,14 @@
-# 🎬 HOMES-Engine × VideoLM — Demo Guide
+# HOMES-Engine x VideoLM Demo Guide
 
-> Setup completo em um comando. Funciona em qualquer máquina com Docker.
+The reviewer path is hosted first, terminal second.
+
+Hosted demo:
+
+```text
+https://54-162-84-165.sslip.io/engine-demo
+```
+
+The hosted demo includes pre-rendered videos, deterministic generation, status/progress, and a final MP4 player. The terminal remains the main identity of the project, but reviewers do not need to install the full stack just to see the result.
 
 ---
 
@@ -19,53 +27,51 @@ O VideoLM é o **motor de renderização**.
 
 ---
 
-## Pré-requisitos
+## Reviewer CLI
 
-- Docker + Docker Compose
-- Git
-- Uma chave de API Gemini gratuita: https://aistudio.google.com
+```bash
+python main.py --demo-url
+python main.py --health
+python main.py --manifest
+python main.py
+```
+
+Use `python main.py --demo-url` as the fastest handoff. It prints the hosted page backed by the VM renderer.
 
 ---
 
-## Setup em 3 passos
+## Local Prerequisites
 
-### 1. Clone e configure o VideoLM (motor de renderização)
+- Git
+- Python 3.10+
+- FFmpeg
+- Optional Gemini API key for AI script/TTS generation
+
+---
+
+## Local Setup
+
+### 1. Use the hosted VideoLM renderer
 
 ```bash
-git clone https://github.com/EngThi/VideoLM
-cd VideoLM
-cp .env.example .env
-# Edite .env e preencha: GEMINI_API_KEY=sua_chave_aqui
-docker-compose up -d
-# VideoLM estará rodando em http://localhost:3000
+export VIDEOLM_URL=https://54-162-84-165.sslip.io
 ```
 
-### 2. Clone e configure o Engine (orquestrador)
+### 2. Clone and configure the Engine
 
 ```bash
 git clone https://github.com/EngThi/HOMES-Engine
 cd HOMES-Engine
 cp .env.example .env
 
-# Preencha no .env:
-# GEMINI_API_KEY=sua_chave_aqui
-# VIDEOLM_URL=http://localhost:3000
-
 bash setup.sh
 ```
 
-### 3. Gere seu primeiro vídeo
+### 3. Run
 
 ```bash
-# Opção A — Menu interativo
 python main.py
-
-# Opção B — Linha de comando direto
-echo "The reason billionaires wake up at 4am" > queue/my_topic.txt
-python core/video_maker.py queue/my_topic.txt
-
-# O .mp4 final aparece em:
-# output/renders/HOMES_my_topic_XXXXXX.mp4
+python main.py --render scripts/e2e_engine_test.txt
 ```
 
 ---
@@ -84,8 +90,9 @@ python -m core.videolm_client
 | Variável | Padrão | Descrição |
 |---|---|---|
 | `GEMINI_API_KEY` | — | Obrigatória. Gemini TTS + Script + Imagens |
-| `VIDEOLM_URL` | `http://localhost:3000` | URL do backend VideoLM |
-| `VIDEOLM_TOKEN` | vazio | JWT VideoLM — vazio usa endpoint `/demo/assemble` |
+| `VIDEOLM_URL` | `https://54-162-84-165.sslip.io` | URL do backend VideoLM hospedado |
+| `VIDEOLM_TOKEN` | vazio | JWT VideoLM opcional, quando o backend exigir autenticação |
+| `VIDEOLM_ASSEMBLE_PATH` | auto | Endpoint de render; sem token usa `/api/video/demo/assemble`, com token usa `/api/video/assemble` |
 | `VIDEOLM_POLL_INTERVAL` | `5` | Segundos entre checks de status |
 | `VIDEOLM_POLL_TIMEOUT` | `600` | Timeout máximo de render (10 min) |
 | `POLLINATIONS_API_KEY` | vazio | Opcional — melhora rate limit das imagens |
@@ -99,11 +106,11 @@ Script (.txt)
     ↓  Gemini Flash         → roteiro em EN-US
     ↓  Gemini TTS (Kore)    → narration.wav
     ↓  Gemini / Pollinations → scene_0.jpg ... scene_N.jpg  [paralelo, 4 workers]
-    ↓  POST /api/video/demo/assemble (VideoLM)
+    ↓  POST /api/video/demo/assemble (demo) ou /api/video/assemble (JWT)
     ↓  BullMQ render queue
     ↓  FFmpeg: Ken Burns + SRT subtitles + sidechain music
     ↓  GET /api/video/:id/status  [polling a cada 5s]
-    ↓  Download .mp4
+    ↓  Download .mp4 via videoUrl ou videoPath, incluindo URLs relativas como /videos/file.mp4
  output/renders/HOMES_topic_HHMMSS.mp4
 ```
 
@@ -112,8 +119,7 @@ Script (.txt)
 ## Troubleshooting
 
 **`❌ VideoLM rejeitou o job: HTTP 401`**  
-O endpoint `/demo/assemble` não existe ainda — adicione-o no VideoLM (ver PR aberto).  
-Alternativa: gere um JWT com `POST /api/auth/login` e coloque em `VIDEOLM_TOKEN`.
+Gere um JWT com `POST /api/auth/login` e coloque em `VIDEOLM_TOKEN`, ou habilite o endpoint para aceitar o Engine sem autenticação no ambiente de demo.
 
 **`⏰ Timeout aguardando VideoLM`**  
 Aumente `VIDEOLM_POLL_TIMEOUT=900` no `.env`. Máquinas lentas podem precisar de mais tempo.

@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Optional
 from config import ASSETS_DIR
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,12 @@ class ImageGenerator:
 
         # 2. Fallback para Pollinations (Flux) - Garantia de entrega
         logger.warning("⚠️ Todas as chaves Gemini falharam na imagem. Usando FLUX (VIP)...")
-        return self._try_pollinations(enhanced_prompt, filename, width, height)
+        result = self._try_pollinations(enhanced_prompt, filename, width, height)
+        if result:
+            return result
+
+        logger.warning("⚠️ FLUX indisponível. Gerando fallback visual local...")
+        return self._create_local_fallback(prompt, filename, width, height)
 
     def _try_gemini(self, prompt: str, filename: str, key: str) -> Optional[str]:
         """Tenta gerar via Imagen/Gemini API."""
@@ -96,6 +102,58 @@ class ImageGenerator:
         except Exception as e:
             logger.error(f"❌ Falha crítica no FLUX: {e}")
         return None
+
+    def _create_local_fallback(self, prompt: str, filename: str, width: int, height: int) -> Optional[str]:
+        """Cria uma imagem vertical simples para manter o pipeline de vídeo funcional."""
+        try:
+            output_path = Path(ASSETS_DIR) / "generated" / filename
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            img = Image.new("RGB", (width, height), "#111827")
+            draw = ImageDraw.Draw(img)
+
+            for y in range(height):
+                ratio = y / max(1, height - 1)
+                r = int(17 + ratio * 18)
+                g = int(24 + ratio * 55)
+                b = int(39 + ratio * 85)
+                draw.line([(0, y), (width, y)], fill=(r, g, b))
+
+            accent = "#f8c537"
+            draw.rectangle([48, 72, width - 48, 88], fill=accent)
+            draw.rectangle([48, height - 132, width - 48, height - 124], fill=accent)
+
+            try:
+                font_title = ImageFont.truetype(str(Path(ASSETS_DIR) / "fonts" / "Montserrat-ExtraBold.ttf"), 42)
+                font_body = ImageFont.truetype(str(Path(ASSETS_DIR) / "fonts" / "Montserrat-ExtraBold.ttf"), 28)
+            except Exception:
+                font_title = ImageFont.load_default()
+                font_body = ImageFont.load_default()
+
+            draw.text((48, 130), "HOMES ENGINE", fill="#ffffff", font=font_title)
+
+            words = prompt.replace("\n", " ").split()
+            lines = []
+            current = []
+            for word in words[:42]:
+                current.append(word)
+                if len(" ".join(current)) > 24:
+                    lines.append(" ".join(current[:-1]))
+                    current = [word]
+            if current:
+                lines.append(" ".join(current))
+
+            y = 250
+            for line in lines[:9]:
+                draw.text((48, y), line.upper(), fill="#e5e7eb", font=font_body)
+                y += 46
+
+            img.save(output_path, "JPEG", quality=92)
+            logger.info(f"✅ Imagem fallback local criada: {output_path}")
+            return str(output_path.absolute())
+        except Exception as e:
+            logger.error(f"❌ Falha ao criar imagem fallback local: {e}")
+            return None
 
 # Função estática de compatibilidade
 def generate_image(prompt: str, filename: str) -> Optional[str]:

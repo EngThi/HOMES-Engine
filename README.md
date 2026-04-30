@@ -1,6 +1,35 @@
 # HOMES Engine: Absolute Cinema Creator
 
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FFmpeg](https://img.shields.io/badge/FFmpeg-rendering-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
+[![Terminal First](https://img.shields.io/badge/interface-terminal--first-111827)](#try-it)
+[![Hosted Demo](https://img.shields.io/badge/demo-online-16A34A)](https://54-162-84-165.sslip.io/engine-demo)
+[![VideoLM](https://img.shields.io/badge/renderer-VideoLM-7C3AED)](https://54-162-84-165.sslip.io/api/engine/manifest)
+
 HOMES Engine is an automated video production system designed to generate high-quality, branded content directly from mobile environments. Originally conceived as a challenge to traditional desktop-heavy workflows, the project focuses on orchestrating AI scripting, voice synthesis, and complex FFmpeg rendering within restricted hardware.
+
+## Try It
+
+Hosted reviewer demo:
+
+```text
+https://54-162-84-165.sslip.io/engine-demo
+```
+
+Terminal-first workflow:
+
+```bash
+python3 main.py --demo-url
+python3 main.py --health
+python3 main.py --manifest
+python3 main.py
+```
+
+The hosted demo is backed by the VideoLM VM renderer and includes pre-rendered outputs plus deterministic demo generation. The CLI remains the main interface for creators and developers.
+
+> [!TIP]
+> A completed Hack Club NotebookLM render is available as a public MP4:<br>
+> [Watch the Hack Club community render](https://54-162-84-165.sslip.io/videos/research_community_1777566704645.mp4)
 
 ## The Vision & History
 
@@ -44,7 +73,7 @@ While optimized for Termux, HOMES Engine can run on any Linux-based system with 
    bash setup.sh
    ```
 2. **Configuration:**
-   Rename `.env.example` to `.env` and add your `GEMINI_API_KEY`.
+   Rename `.env.example` to `.env`. The default renderer is the hosted VideoLM VM. Add a `GEMINI_API_KEY` only if you want AI script/TTS generation locally.
 3. **Execution:**
    ```bash
    python3 main.py
