@@ -17,6 +17,17 @@ from core.videolm_client import (
 logger = get_logger(__name__)
 CYAN, GREEN, YELLOW, RED, RESET = "\033[96m", "\033[92m", "\033[93m", "\033[91m", "\033[0m"
 DEFAULT_DEMO_SCRIPT = "scripts/e2e_engine_test.txt"
+NOTEBOOKLM_STYLES = [
+    "classic",
+    "whiteboard",
+    "watercolor",
+    "anime",
+    "kawaii",
+    "retro_print",
+    "heritage",
+    "paper_craft",
+    "custom",
+]
 
 def clear_screen(): os.system('clear')
 def print_banner(current_brand="demo"):
@@ -29,6 +40,7 @@ def print_banner(current_brand="demo"):
 
 def safe_input(prompt):
     try: return input(prompt).strip()
+    except EOFError: return ""
     except KeyboardInterrupt: print(f"\n\n🛑 {RED}Saindo...{RESET}"); sys.exit()
 
 def run_command(cmd):
@@ -143,16 +155,79 @@ def print_hosted_demo():
     print(f"{GREEN}Hosted demo:{RESET} {engine_demo_url()}")
     print("Use essa página para reviewers: galeria, temas prontos, geração determinística e player final.")
 
-def submit_notebooklm_from_cli(project_id="", theme="", url="", style="paper_craft"):
-    project_id = project_id or safe_input("Project ID: ")
-    theme = theme or safe_input("Theme: ")
-    url = url or safe_input("Source URL: ")
+def parse_csv_values(values):
+    parsed = []
+    for value in values or []:
+        for part in str(value).split(","):
+            part = part.strip()
+            if part:
+                parsed.append(part)
+    return parsed
+
+def validate_notebooklm_style(style, style_prompt=""):
+    if style not in NOTEBOOKLM_STYLES:
+        raise ValueError(f"Invalid NotebookLM style '{style}'. Use one of: {', '.join(NOTEBOOKLM_STYLES)}")
+    if style == "custom" and not style_prompt.strip():
+        raise ValueError("stylePrompt is required when style=custom")
+    return True
+
+def choose_notebooklm_style():
+    print(f"\n{CYAN}NotebookLM styles:{RESET}")
+    for i, style in enumerate(NOTEBOOKLM_STYLES, start=1):
+        print(f"{YELLOW}[{i}]{RESET} {style}")
+    raw = safe_input("Style [paper_craft]: ")
+    if not raw:
+        return "paper_craft"
+    if raw.isdigit():
+        try:
+            return NOTEBOOKLM_STYLES[int(raw) - 1]
+        except Exception:
+            return "paper_craft"
+    return raw
+
+def submit_notebooklm_from_cli(
+    project_id="",
+    theme="",
+    urls=None,
+    style="paper_craft",
+    title="",
+    asset_paths=None,
+    style_prompt="",
+    live_research=False,
+    notebook_id="",
+    profile_id="default",
+    interactive=True,
+):
+    if interactive:
+        project_id = project_id or safe_input("Project ID: ")
+        title = title or safe_input("Title (optional): ")
+        theme = theme or safe_input("Theme: ")
+    urls = parse_csv_values(urls)
+    if interactive and not urls:
+        url = safe_input("Source URL (optional): ")
+        urls = [url] if url else []
+    asset_paths = parse_csv_values(asset_paths)
+    if interactive and not style:
+        style = choose_notebooklm_style()
     style = style or "paper_craft"
+    if interactive and style == "custom" and not style_prompt:
+        style_prompt = safe_input("Custom style prompt: ")
+    if interactive and not notebook_id:
+        notebook_id = safe_input("Existing notebookId (optional): ")
+    if interactive and not profile_id:
+        profile_id = safe_input("Profile ID [default]: ") or "default"
+    validate_notebooklm_style(style, style_prompt)
     result = submit_notebooklm_video(
         project_id=project_id,
+        title=title,
         theme=theme,
-        urls=[url] if url else [],
+        urls=urls,
+        asset_paths=asset_paths,
         style=style,
+        style_prompt=style_prompt,
+        live_research=live_research,
+        notebook_id=notebook_id,
+        profile_id=profile_id,
     )
     print(json.dumps(result, indent=2))
     return result
@@ -215,9 +290,15 @@ if __name__ == "__main__":
     parser.add_argument("--notebooklm-submit", action="store_true", help="Submete um video NotebookLM hosted")
     parser.add_argument("--notebooklm-poll", help="Consulta um projectId NotebookLM hosted")
     parser.add_argument("--project-id", default="", help="Project ID para NotebookLM")
+    parser.add_argument("--title", default="", help="Título para NotebookLM")
     parser.add_argument("--theme", default="", help="Tema para NotebookLM")
-    parser.add_argument("--url", default="", help="URL fonte para NotebookLM")
-    parser.add_argument("--style", default="paper_craft", help="Estilo NotebookLM")
+    parser.add_argument("--url", action="append", default=[], help="URL fonte para NotebookLM; pode repetir ou usar vírgulas")
+    parser.add_argument("--asset", action="append", default=[], help="Arquivo asset para NotebookLM; pode repetir ou usar vírgulas")
+    parser.add_argument("--style", default="paper_craft", choices=NOTEBOOKLM_STYLES, help="Estilo NotebookLM")
+    parser.add_argument("--style-prompt", default="", help="Prompt obrigatório quando --style custom")
+    parser.add_argument("--live-research", action="store_true", help="Ativa liveResearch no NotebookLM")
+    parser.add_argument("--notebook-id", default="", help="NotebookLM notebook existente")
+    parser.add_argument("--profile-id", default="default", help="Perfil NotebookLM")
     
     args = parser.parse_args()
     
@@ -232,7 +313,23 @@ if __name__ == "__main__":
     elif args.demo:
         sys.exit(0 if render_script(DEFAULT_DEMO_SCRIPT, args.brand) else 1)
     elif args.notebooklm_submit:
-        submit_notebooklm_from_cli(args.project_id, args.theme, args.url, args.style)
+        try:
+            submit_notebooklm_from_cli(
+                project_id=args.project_id,
+                title=args.title,
+                theme=args.theme,
+                urls=args.url,
+                asset_paths=args.asset,
+                style=args.style,
+                style_prompt=args.style_prompt,
+                live_research=args.live_research,
+                notebook_id=args.notebook_id,
+                profile_id=args.profile_id,
+                interactive=False,
+            )
+        except ValueError as e:
+            print(f"{RED}{e}{RESET}")
+            sys.exit(2)
     elif args.notebooklm_poll:
         poll_notebooklm_from_cli(args.notebooklm_poll)
     elif args.hub:

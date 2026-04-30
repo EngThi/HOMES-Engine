@@ -72,21 +72,81 @@ def test_poll_notebooklm_from_cli(monkeypatch, capsys):
 
 
 def test_submit_notebooklm_from_cli(monkeypatch, capsys):
+    captured = {}
+
+    def fake_submit(**kwargs):
+        captured.update(kwargs)
+        return {
+            "projectId": kwargs["project_id"],
+            "status": "submitted",
+        }
+
     monkeypatch.setattr(
         main,
         "submit_notebooklm_video",
-        lambda **kwargs: {
-            "projectId": kwargs["project_id"],
-            "status": "submitted",
-        },
+        fake_submit,
+    )
+
+    result = main.submit_notebooklm_from_cli(
+        project_id="demo",
+        title="Demo Title",
+        theme="Hack Club",
+        urls=["https://hackclub.com/,https://example.com"],
+        asset_paths=["assets/broll/i1.jpg"],
+        style="custom",
+        style_prompt="paper collage with terminal UI",
+        live_research=True,
+        notebook_id="notebook-1",
+        profile_id="default",
+        interactive=False,
+    )
+
+    assert result["status"] == "submitted"
+    assert captured["title"] == "Demo Title"
+    assert captured["urls"] == ["https://hackclub.com/", "https://example.com"]
+    assert captured["asset_paths"] == ["assets/broll/i1.jpg"]
+    assert captured["style"] == "custom"
+    assert captured["style_prompt"] == "paper collage with terminal UI"
+    assert captured["live_research"] is True
+    assert captured["notebook_id"] == "notebook-1"
+    assert "submitted" in capsys.readouterr().out
+
+
+def test_submit_notebooklm_from_cli_noninteractive_does_not_prompt(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        main,
+        "submit_notebooklm_video",
+        lambda **kwargs: captured.update(kwargs) or {"status": "submitted"},
     )
 
     result = main.submit_notebooklm_from_cli(
         project_id="demo",
         theme="Hack Club",
-        url="https://hackclub.com/",
+        urls=["https://hackclub.com/"],
         style="paper_craft",
+        interactive=False,
     )
 
     assert result["status"] == "submitted"
-    assert "submitted" in capsys.readouterr().out
+    assert captured["title"] == ""
+    assert captured["notebook_id"] == ""
+
+
+def test_validate_notebooklm_style_requires_prompt_for_custom():
+    assert main.validate_notebooklm_style("paper_craft") is True
+
+    try:
+        main.validate_notebooklm_style("custom", "")
+    except ValueError as e:
+        assert "stylePrompt" in str(e)
+    else:
+        raise AssertionError("Expected ValueError")
+
+
+def test_parse_csv_values():
+    assert main.parse_csv_values(["https://a.com, https://b.com", "https://c.com"]) == [
+        "https://a.com",
+        "https://b.com",
+        "https://c.com",
+    ]

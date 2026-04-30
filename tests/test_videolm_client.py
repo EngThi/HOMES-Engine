@@ -93,22 +93,37 @@ def test_fetch_engine_manifest(monkeypatch):
     assert get.call_args.args[0] == "https://54-162-84-165.sslip.io/api/engine/manifest"
 
 
-def test_submit_notebooklm_video_posts_multipart(monkeypatch):
+def test_submit_notebooklm_video_posts_multipart(tmp_path, monkeypatch):
     monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
     post = Mock(return_value=FakeResponse(payload={"projectId": "nb1", "status": "submitted"}))
     monkeypatch.setattr(videolm_client.requests, "post", post)
+    asset = tmp_path / "source.txt"
+    asset.write_text("asset")
 
     result = videolm_client.submit_notebooklm_video(
         project_id="nb1",
+        title="Notebook Demo",
         theme="Hack Club community",
         urls=["https://hackclub.com/"],
-        style="paper_craft",
+        asset_paths=[str(asset)],
+        style="custom",
+        style_prompt="paper collage",
+        live_research=True,
+        notebook_id="notebook-1",
+        profile_id="profile-1",
     )
 
     assert result["status"] == "submitted"
     assert post.call_args.args[0] == "https://54-162-84-165.sslip.io/api/engine/notebooklm/video"
     assert ("projectId", "nb1") in post.call_args.kwargs["data"]
+    assert ("title", "Notebook Demo") in post.call_args.kwargs["data"]
     assert ("urls", "https://hackclub.com/") in post.call_args.kwargs["data"]
+    assert ("style", "custom") in post.call_args.kwargs["data"]
+    assert ("stylePrompt", "paper collage") in post.call_args.kwargs["data"]
+    assert ("liveResearch", "true") in post.call_args.kwargs["data"]
+    assert ("notebookId", "notebook-1") in post.call_args.kwargs["data"]
+    assert ("profileId", "profile-1") in post.call_args.kwargs["data"]
+    assert post.call_args.kwargs["files"][0][0] == "assets"
 
 
 def test_poll_notebooklm_video(monkeypatch):
