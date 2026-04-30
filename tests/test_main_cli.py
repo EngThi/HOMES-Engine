@@ -46,3 +46,47 @@ def test_print_hosted_demo(monkeypatch, capsys):
     main.print_hosted_demo()
 
     assert "engine-demo" in capsys.readouterr().out
+
+
+def test_poll_notebooklm_from_cli(monkeypatch, capsys):
+    monkeypatch.setattr(
+        main,
+        "poll_notebooklm_video",
+        lambda project_id: {
+            "status": "completed",
+            "videoUrl": "/videos/research_demo.mp4",
+            "type": "video",
+            "cached": True,
+        },
+    )
+    monkeypatch.setattr(
+        main,
+        "resolve_video_url",
+        lambda path: f"https://54-162-84-165.sslip.io{path}",
+    )
+
+    result = main.poll_notebooklm_from_cli("demo")
+
+    assert result["cached"] is True
+    assert "research_demo.mp4" in capsys.readouterr().out
+
+
+def test_submit_notebooklm_from_cli(monkeypatch, capsys):
+    monkeypatch.setattr(
+        main,
+        "submit_notebooklm_video",
+        lambda **kwargs: {
+            "projectId": kwargs["project_id"],
+            "status": "submitted",
+        },
+    )
+
+    result = main.submit_notebooklm_from_cli(
+        project_id="demo",
+        theme="Hack Club",
+        url="https://hackclub.com/",
+        style="paper_craft",
+    )
+
+    assert result["status"] == "submitted"
+    assert "submitted" in capsys.readouterr().out

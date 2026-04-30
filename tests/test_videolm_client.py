@@ -93,6 +93,45 @@ def test_fetch_engine_manifest(monkeypatch):
     assert get.call_args.args[0] == "https://54-162-84-165.sslip.io/api/engine/manifest"
 
 
+def test_submit_notebooklm_video_posts_multipart(monkeypatch):
+    monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
+    post = Mock(return_value=FakeResponse(payload={"projectId": "nb1", "status": "submitted"}))
+    monkeypatch.setattr(videolm_client.requests, "post", post)
+
+    result = videolm_client.submit_notebooklm_video(
+        project_id="nb1",
+        theme="Hack Club community",
+        urls=["https://hackclub.com/"],
+        style="paper_craft",
+    )
+
+    assert result["status"] == "submitted"
+    assert post.call_args.args[0] == "https://54-162-84-165.sslip.io/api/engine/notebooklm/video"
+    assert ("projectId", "nb1") in post.call_args.kwargs["data"]
+    assert ("urls", "https://hackclub.com/") in post.call_args.kwargs["data"]
+
+
+def test_poll_notebooklm_video(monkeypatch):
+    monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
+    get = Mock(return_value=FakeResponse(payload={"status": "completed", "videoUrl": "/videos/research_nb1.mp4"}))
+    monkeypatch.setattr(videolm_client.requests, "get", get)
+
+    result = videolm_client.poll_notebooklm_video("nb1")
+
+    assert result["status"] == "completed"
+    assert get.call_args.args[0] == "https://54-162-84-165.sslip.io/api/research/nb1/download"
+
+
+def test_resolve_video_url(monkeypatch):
+    monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
+
+    assert (
+        videolm_client.resolve_video_url("/videos/research_nb1.mp4")
+        == "https://54-162-84-165.sslip.io/videos/research_nb1.mp4"
+    )
+    assert videolm_client.resolve_video_url("https://example.com/v.mp4") == "https://example.com/v.mp4"
+
+
 def test_assemble_posts_assets_polls_and_downloads_video(tmp_path, monkeypatch):
     monkeypatch.setenv("VIDEOLM_URL", "https://videolm-absolute-cinema.loca.lt")
     monkeypatch.delenv("VIDEOLM_ASSEMBLE_PATH", raising=False)

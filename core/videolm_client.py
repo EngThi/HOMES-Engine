@@ -90,6 +90,85 @@ def fetch_engine_manifest(timeout: int = 15) -> dict:
     return resp.json()
 
 
+def submit_notebooklm_video(
+    project_id: str = "",
+    title: str = "",
+    theme: str = "",
+    urls: Optional[list] = None,
+    asset_paths: Optional[list] = None,
+    style: str = "classic",
+    style_prompt: str = "",
+    live_research: bool = False,
+    notebook_id: str = "",
+    profile_id: str = "default",
+    timeout: int = 120,
+) -> dict:
+    """Submete um job NotebookLM video para o VideoLM hosted bridge."""
+    endpoint = f"{_base_url()}/api/engine/notebooklm/video"
+    data = [
+        ("style", style),
+        ("liveResearch", str(live_research).lower()),
+        ("profileId", profile_id or "default"),
+    ]
+    if project_id:
+        data.append(("projectId", project_id))
+    if title:
+        data.append(("title", title))
+    if theme:
+        data.append(("theme", theme))
+    if style_prompt:
+        data.append(("stylePrompt", style_prompt))
+    if notebook_id:
+        data.append(("notebookId", notebook_id))
+    for url in urls or []:
+        if url:
+            data.append(("urls", url))
+
+    files = []
+    handles = []
+    try:
+        for path in asset_paths or []:
+            if not path:
+                continue
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"NotebookLM asset not found: {path}")
+            fh = open(path, "rb")
+            handles.append(fh)
+            files.append(("assets", (Path(path).name, fh, "application/octet-stream")))
+
+        resp = requests.post(
+            endpoint,
+            data=data,
+            files=files or None,
+            headers=_headers(),
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    finally:
+        for fh in handles:
+            fh.close()
+
+
+def poll_notebooklm_video(project_id: str, timeout: int = 30) -> dict:
+    """Consulta o endpoint de download/cache de um job NotebookLM video."""
+    if not project_id:
+        raise ValueError("project_id is required")
+    resp = requests.get(
+        f"{_base_url()}/api/research/{project_id}/download",
+        headers=_headers(),
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def resolve_video_url(video_path: str) -> str:
+    if not video_path:
+        return ""
+    return video_path if video_path.startswith("http") else f"{_base_url()}{video_path}"
+
+
 def assemble_via_videolm(
     audio_path: str,
     image_paths: list,

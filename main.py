@@ -9,6 +9,9 @@ from core.videolm_client import (
     engine_demo_url,
     fetch_engine_health,
     fetch_engine_manifest,
+    poll_notebooklm_video,
+    resolve_video_url,
+    submit_notebooklm_video,
 )
 
 logger = get_logger(__name__)
@@ -56,6 +59,7 @@ def main_menu(brand="demo"):
     print(f"{YELLOW}[7]{RESET} 👤 Trocar Perfil")
     print(f"{YELLOW}[8]{RESET} 📥 Modo Fila Local")
     print(f"{YELLOW}[9]{RESET} 🔌 Modo Hub")
+    print(f"{YELLOW}[10]{RESET} 📚 NotebookLM Video")
     print(f"{YELLOW}[0]{RESET} ❌ Sair")
     return safe_input(f"\n{CYAN}👉 Opção:{RESET} ")
 
@@ -139,6 +143,28 @@ def print_hosted_demo():
     print(f"{GREEN}Hosted demo:{RESET} {engine_demo_url()}")
     print("Use essa página para reviewers: galeria, temas prontos, geração determinística e player final.")
 
+def submit_notebooklm_from_cli(project_id="", theme="", url="", style="paper_craft"):
+    project_id = project_id or safe_input("Project ID: ")
+    theme = theme or safe_input("Theme: ")
+    url = url or safe_input("Source URL: ")
+    style = style or "paper_craft"
+    result = submit_notebooklm_video(
+        project_id=project_id,
+        theme=theme,
+        urls=[url] if url else [],
+        style=style,
+    )
+    print(json.dumps(result, indent=2))
+    return result
+
+def poll_notebooklm_from_cli(project_id):
+    result = poll_notebooklm_video(project_id)
+    print(json.dumps(result, indent=2))
+    video_url = resolve_video_url(result.get("videoUrl") or result.get("videoPath") or "")
+    if video_url:
+        print(f"{GREEN}Video:{RESET} {video_url}")
+    return result
+
 def main():
     current_brand = "demo"
     with ErrorContext("HOMES-Engine"):
@@ -166,6 +192,8 @@ def main():
             elif choice == '9':
                 from integration.queue_poller import main_loop as hub_poller
                 hub_poller()
+            elif choice == '10':
+                submit_notebooklm_from_cli()
             else:
                 print(f"{RED}Opção não implementada.{RESET}")
             safe_input("\n[Enter] para continuar...")
@@ -184,6 +212,12 @@ if __name__ == "__main__":
     parser.add_argument("--demo-url", action="store_true", help="Mostra a URL da demo web")
     parser.add_argument("--render", help="Renderiza um script .txt diretamente")
     parser.add_argument("--demo", action="store_true", help="Renderiza o roteiro demo local pelo Engine")
+    parser.add_argument("--notebooklm-submit", action="store_true", help="Submete um video NotebookLM hosted")
+    parser.add_argument("--notebooklm-poll", help="Consulta um projectId NotebookLM hosted")
+    parser.add_argument("--project-id", default="", help="Project ID para NotebookLM")
+    parser.add_argument("--theme", default="", help="Tema para NotebookLM")
+    parser.add_argument("--url", default="", help="URL fonte para NotebookLM")
+    parser.add_argument("--style", default="paper_craft", help="Estilo NotebookLM")
     
     args = parser.parse_args()
     
@@ -197,6 +231,10 @@ if __name__ == "__main__":
         sys.exit(0 if render_script(args.render, args.brand) else 1)
     elif args.demo:
         sys.exit(0 if render_script(DEFAULT_DEMO_SCRIPT, args.brand) else 1)
+    elif args.notebooklm_submit:
+        submit_notebooklm_from_cli(args.project_id, args.theme, args.url, args.style)
+    elif args.notebooklm_poll:
+        poll_notebooklm_from_cli(args.notebooklm_poll)
     elif args.hub:
         hub_poller()
     elif args.daemon:
