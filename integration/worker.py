@@ -23,6 +23,7 @@ from core.hub_client import (
     fetch_pending_job,
     report_job_done,
     report_job_error,
+    report_job_status,
     push_telemetry,
     poll_commands,
     execute_command,
@@ -64,21 +65,27 @@ def process_hub_job(job: dict) -> bool:
     topic  = job.get("topic", "general")
     script = job.get("script", "")
     theme  = job.get("theme", "yellow_punch")
+    brand  = job.get("brand") or theme or "demo"
+    params = job.get("params") or {}
 
     logger.info(f"🎬 Processando job #{job_id}: {topic[:60]}")
+
+    report_job_status(job_id, "processing", progress=5, stage="received", message="Engine accepted job")
 
     # Salva script em arquivo para video_maker
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
     script_path = os.path.join(SCRIPTS_DIR, f"job_{job_id}.txt")
 
     # Se o Hub não mandou script pronto, usa o tópico direto
-    content = script if script.strip() else topic
+    content = script if script.strip() else _script_from_job(topic, params)
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(content)
 
     try:
-        output_path = generate_video(script_path, theme_name=theme)
+        report_job_status(job_id, "processing", progress=20, stage="rendering", message="Rendering video")
+        output_path = generate_video(script_path, theme_name=theme, brand_name=brand)
         if output_path:
+            report_job_status(job_id, "processing", progress=95, stage="reporting", message="Render complete")
             report_job_done(job_id, output_path)
             logger.info(f"✅ Job #{job_id} concluído → {output_path}")
             return True
@@ -89,6 +96,24 @@ def process_hub_job(job: dict) -> bool:
         logger.error(f"❌ Job #{job_id} falhou: {error_msg}")
         report_job_error(job_id, error_msg)
         return False
+
+
+def _script_from_job(topic: str, params: dict) -> str:
+    target = int(params.get("target_duration_seconds") or 30)
+    language = params.get("language") or "en-US"
+    base = (
+        f"{topic}. This HOMES Engine render demonstrates the public dashboard workflow. "
+        "The request started in the Hub, moved through the Engine worker, and returns a completed MP4 artifact. "
+        "The system is built for terminal-first orchestration, hosted rendering, and reliable reviewer demos. "
+    )
+    if language.lower().startswith("pt"):
+        base = (
+            f"{topic}. Este render do HOMES Engine demonstra o fluxo público do dashboard. "
+            "O pedido nasce no Hub, passa pelo worker do Engine e volta como um MP4 concluído. "
+            "O sistema foi feito para orquestração no terminal, render hospedado e demos confiáveis para review. "
+        )
+    repeats = max(1, target // 18)
+    return (base * repeats).strip()
 
 
 def run_worker():

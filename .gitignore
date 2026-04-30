@@ -26,6 +26,8 @@ scripts/*.txt
 # Internal AI Context & Simulation
 .gemini/
 logs/
+queue/job_*.txt
+queue/cmd_*.txt
 
 # Private Tools & Management
 TESTES/

@@ -37,11 +37,19 @@ def _sign(payload: dict) -> str:
     return hmac.new(HUB_SECRET.encode(), body, hashlib.sha256).hexdigest()
 
 
-def _signed_headers(payload: dict) -> dict:
-    return {
+def _signed_body_and_headers(payload: dict) -> tuple[bytes, dict]:
+    body = json.dumps(payload, separators=(',', ':')).encode()
+    signature = hmac.new(HUB_SECRET.encode(), body, hashlib.sha256).hexdigest()
+    headers = {
         "Content-Type": "application/json",
-        "X-Homes-Signature": _sign(payload),
+        "X-Homes-Signature": signature,
     }
+    return body, headers
+
+
+def _post_signed(path: str, payload: dict, timeout: int = 10) -> requests.Response:
+    body, headers = _signed_body_and_headers(payload)
+    return requests.post(f"{HUB_BASE}{path}", data=body, headers=headers, timeout=timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +68,27 @@ def fetch_pending_job() -> Optional[dict]:
     return None
 
 
+def report_job_status(job_id: str, status: str, progress: int = 0, stage: str = "", message: str = "") -> bool:
+    """Atualiza progresso/status de um job no Hub."""
+    payload = {
+        "id": job_id,
+        "status": status,
+        "progress": progress,
+        "stage": stage,
+        "message": message,
+        "engine_id": ENGINE_ID,
+        "timestamp": time.time(),
+    }
+    try:
+        r = _post_signed(f"/api/projects/{job_id}/status", payload, timeout=10)
+        if not r.ok:
+            logger.warning(f"Hub rejeitou status {status} do job {job_id}: {r.status_code} {r.text[:200]}")
+        return r.ok
+    except requests.RequestException as e:
+        logger.error(f"Falha ao reportar status do job {job_id}: {e}")
+    return False
+
+
 def report_job_done(job_id: str, video_path: str) -> bool:
     """Notifica o Hub que o job foi concluído."""
     payload = {
@@ -70,13 +99,9 @@ def report_job_done(job_id: str, video_path: str) -> bool:
         "timestamp": time.time(),
     }
     try:
-        # Corrigido para /api/projects/ conforme o guia
-        r = requests.post(
-            f"{HUB_BASE}/api/projects/{job_id}/complete",
-            json=payload,
-            headers=_signed_headers(payload),
-            timeout=10,
-        )
+        r = _post_signed(f"/api/projects/{job_id}/complete", payload, timeout=10)
+        if not r.ok:
+            logger.warning(f"Hub rejeitou conclusão do job {job_id}: {r.status_code} {r.text[:200]}")
         return r.ok
     except requests.RequestException as e:
         logger.error(f"Falha ao reportar job {job_id}: {e}")
@@ -93,12 +118,9 @@ def report_job_error(job_id: str, error_msg: str) -> bool:
         "timestamp": time.time(),
     }
     try:
-        r = requests.post(
-            f"{HUB_BASE}/api/project/{job_id}/complete",
-            json=payload,
-            headers=_signed_headers(payload),
-            timeout=10,
-        )
+        r = _post_signed(f"/api/projects/{job_id}/status", payload, timeout=10)
+        if not r.ok:
+            logger.warning(f"Hub rejeitou erro do job {job_id}: {r.status_code} {r.text[:200]}")
         return r.ok
     except requests.RequestException as e:
         logger.error(f"Falha ao reportar erro do job {job_id}: {e}")
@@ -154,11 +176,7 @@ def push_telemetry() -> bool:
     """Envia métricas locais para o Hub (POST /api/sensors)."""
     data = _get_local_telemetry()
     try:
-        r = requests.post(
-            f"{HUB_BASE}/api/sensors",
-            json=data,
-            timeout=5,
-        )
+        r = _post_signed("/api/sensors", data, timeout=5)
         return r.ok
     except requests.RequestException:
         return False

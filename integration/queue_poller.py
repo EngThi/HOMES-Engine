@@ -42,12 +42,14 @@ def process_job(job: dict):
 
     # 2. Renderizar (Absolute Cinema v3.0)
     try:
+        hub_client.report_job_status(job_id, "processing", progress=10, stage="rendering", message="Engine started render")
         logger.info(f"🎬 Iniciando Renderização Local (Marca: {theme})...")
         video_path = generate_video(script_path, brand_name=theme)
         
         if video_path and os.path.exists(video_path):
             logger.info(f"✅ Render concluído: {video_path}")
             # 3. Reportar ao Hub com Assinatura HMAC (automático via hub_client)
+            hub_client.report_job_status(job_id, "processing", progress=95, stage="reporting", message="Render complete")
             if hub_client.report_job_done(job_id, video_path):
                 logger.info(f"📡 Hub sincronizado: Job #{job_id} marcado como COMPLETED.")
             else:
