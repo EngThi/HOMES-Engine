@@ -6,7 +6,7 @@
 [![Hosted Demo](https://img.shields.io/badge/demo-online-16A34A)](https://54-162-84-165.sslip.io/engine-demo)
 [![VideoLM](https://img.shields.io/badge/renderer-VideoLM-7C3AED)](https://54-162-84-165.sslip.io/api/engine/manifest)
 
-HOMES-Engine is a terminal-first video generation worker. It receives jobs from the HOMES Hub/MCP layer, builds or accepts a script, generates narration and visual scenes, delegates final assembly to the hosted VideoLM renderer, and reports a public MP4 artifact back to the Hub.
+HOMES-Engine is a terminal-first video generation worker. It receives jobs from the [HOMES Hub/MCP](https://github.com/EngThi/HOMES) layer, builds or accepts a script, generates narration and visual scenes, delegates final assembly to the hosted VideoLM renderer, and reports a public MP4 artifact back to the Hub.
 
 The project started as a Termux/mobile-first experiment, but the reviewer path is now a hosted worker flow:
 
@@ -243,6 +243,3 @@ This project began in a mobile development setup:
 - **Hardware target:** ARM64 mobile devices and small Linux VMs
 
 The current reship target is a reliable hosted reviewer path backed by the VideoLM VM and HOMES Hub MCP.
-
----
-*Developed during the Hackatime / Flavortown event by the HOMES Architect.*
