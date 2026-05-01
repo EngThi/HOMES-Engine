@@ -16,6 +16,7 @@ import os
 import sys
 import time
 import logging
+import json
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -62,11 +63,11 @@ def process_hub_job(job: dict) -> bool:
     job = { id, topic, script, theme, status }
     """
     job_id = job.get("id", "unknown")
-    topic  = job.get("topic", "general")
+    params = _job_params(job)
+    topic  = _job_text(job, params, "topic", "title", "prompt", default="general")
     script = job.get("script", "")
-    theme  = job.get("theme", "yellow_punch")
+    theme  = _job_text(job, params, "theme", "style", default="yellow_punch")
     brand  = job.get("brand") or theme or "demo"
-    params = job.get("params") or {}
 
     logger.info(f"🎬 Processando job #{job_id}: {topic[:60]}")
 
@@ -76,8 +77,8 @@ def process_hub_job(job: dict) -> bool:
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
     script_path = os.path.join(SCRIPTS_DIR, f"job_{job_id}.txt")
 
-    # Se o Hub não mandou script pronto, usa o tópico direto
-    content = script if script.strip() else _script_from_job(topic, params)
+    # Se o Hub não mandou script pronto, cria um roteiro curto centrado no tema.
+    content = script if script.strip() else _script_from_job(topic, params, theme)
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(content)
 
@@ -98,19 +99,56 @@ def process_hub_job(job: dict) -> bool:
         return False
 
 
-def _script_from_job(topic: str, params: dict) -> str:
+def _job_params(job: dict) -> dict:
+    params = job.get("params") or {}
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except json.JSONDecodeError:
+            params = {"prompt": params}
+    return params if isinstance(params, dict) else {}
+
+
+def _job_text(job: dict, params: dict, *keys: str, default: str = "") -> str:
+    for key in keys:
+        value = job.get(key)
+        if value:
+            return str(value).strip()
+        value = params.get(key)
+        if value:
+            return str(value).strip()
+    return default
+
+
+def _script_from_job(topic: str, params: dict, theme: str = "") -> str:
     target = int(params.get("target_duration_seconds") or 30)
     language = params.get("language") or "en-US"
+    angle = params.get("angle") or params.get("description") or params.get("summary") or ""
+    audience = params.get("audience") or "reviewers"
+    style = params.get("visual_style") or params.get("style") or theme or "editorial"
+    urls = params.get("urls") or params.get("url") or ""
+    if isinstance(urls, list):
+        urls = ", ".join(str(url) for url in urls[:3])
+
+    subject_line = f"{topic}"
+    if angle:
+        subject_line += f": {angle}"
+    source_line = f" Reference source: {urls}." if urls else ""
+
     base = (
-        f"{topic}. This HOMES Engine render demonstrates the public dashboard workflow. "
-        "The request started in the Hub, moved through the Engine worker, and returns a completed MP4 artifact. "
-        "The system is built for terminal-first orchestration, hosted rendering, and reliable reviewer demos. "
+        f"{subject_line}. "
+        f"This video is a concise overview for {audience}, focused on the requested theme rather than a generic system demo. "
+        f"The visual direction is {style}, with each scene reinforcing the topic, the key idea, and the practical takeaway. "
+        f"First, introduce why {topic} matters now. Then show the core concept, one concrete example, and the final takeaway. "
+        f"End by making the topic feel clear, useful, and ready to share.{source_line} "
     )
     if language.lower().startswith("pt"):
         base = (
-            f"{topic}. Este render do HOMES Engine demonstra o fluxo público do dashboard. "
-            "O pedido nasce no Hub, passa pelo worker do Engine e volta como um MP4 concluído. "
-            "O sistema foi feito para orquestração no terminal, render hospedado e demos confiáveis para review. "
+            f"{subject_line}. "
+            f"Este vídeo é um resumo direto para {audience}, focado no tema pedido e não em uma demonstração genérica do sistema. "
+            f"A direção visual é {style}, com cada cena reforçando o assunto, a ideia principal e a conclusão prática. "
+            f"Primeiro, explique por que {topic} importa agora. Depois mostre o conceito central, um exemplo concreto e a mensagem final. "
+            f"Feche deixando o tema claro, útil e pronto para compartilhar.{source_line} "
         )
     repeats = max(1, target // 18)
     return (base * repeats).strip()
