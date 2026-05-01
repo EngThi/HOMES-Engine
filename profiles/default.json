@@ -1,0 +1,19 @@
+{
+  "id": "default",
+  "name": "Default HOMES profile",
+  "preferences": {
+    "language": "en-US",
+    "timezone": "UTC",
+    "video_style": "terminal-first technical demo",
+    "rss_feeds": ["https://hnrss.org/frontpage"]
+  },
+  "goals": [],
+  "devices": [],
+  "sources": [],
+  "policies": {
+    "network": "allow",
+    "allow_hardware": false,
+    "allow_permissions": ["video.render", "hub.report", "profile.read", "state.write"],
+    "deny_permissions": []
+  }
+}

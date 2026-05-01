@@ -1,4 +1,4 @@
-# HOMES-Engine: Terminal-First Video Worker
+# HOMES-Engine: Modular Personal Runtime
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-rendering-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
@@ -6,12 +6,22 @@
 [![Hosted Demo](https://img.shields.io/badge/demo-online-16A34A)](https://54-162-84-165.sslip.io/engine-demo)
 [![VideoLM](https://img.shields.io/badge/renderer-VideoLM-7C3AED)](https://54-162-84-165.sslip.io/api/engine/manifest)
 
-HOMES-Engine is a terminal-first video generation worker. It receives jobs from the [HOMES Hub/MCP](https://github.com/EngThi/HOMES) layer, builds or accepts a script, generates narration and visual scenes, delegates final assembly to the hosted VideoLM renderer, and reports a public MP4 artifact back to the Hub.
+HOMES-Engine is evolving into a modular personal runtime for autonomous workflows, local tools, media pipelines, and physical-world integration. Video generation is the first production-grade capability: the Engine receives jobs from the [HOMES Hub/MCP](https://github.com/EngThi/HOMES) layer, builds or accepts a script, generates narration and visual scenes, delegates final assembly to the hosted VideoLM renderer, and reports a public MP4 artifact back to the Hub.
 
 The project started as a Termux/mobile-first experiment, but the reviewer path is now a hosted worker flow:
 
 ```text
 HOMES Hub MCP -> HOMES-Engine worker -> VideoLM renderer -> public MP4 -> Hub dashboard
+```
+
+The long-term architecture is capability-based rather than app-based:
+
+```text
+Perception -> audio, vision, sensors, system status
+Action     -> shell, browser, notifications, TTS, hardware
+Cognition  -> planning, memory, profiles, policies
+Production -> video, briefs, research, reports
+Integration-> Hub API, MCP tools, queues, webhooks, HMAC, MQTT
 ```
 
 ## Try It
@@ -47,6 +57,7 @@ The hosted demo is backed by the VideoLM VM renderer and includes pre-rendered o
 - **Branding kits:** reads brand profiles for style prompts, colors, logos, and music assets.
 - **Fallback rendering path:** uses local FFmpeg if the hosted renderer is unavailable.
 - **Local queue daemon:** processes `scripts/*.pending.txt` jobs for terminal/offline workflows.
+- **Runtime primitives:** capability registry, profile loader, policy gate, and SQLite state/event store are now scaffolded for broader automation modules.
 
 ## Technical Stack
 
@@ -57,6 +68,44 @@ The hosted demo is backed by the VideoLM VM renderer and includes pre-rendered o
 - **Subtitles:** local ASS subtitle generation
 - **Hub auth:** compact JSON HMAC-SHA256 via `X-Homes-Signature`
 - **Artifacts:** public VideoLM `/videos/*.mp4` URLs plus local `output/renders/` copies
+- **Runtime state:** local SQLite key-value/event store for long-running capabilities
+
+## Runtime Architecture
+
+The Engine is being separated into layers so modules do not hardcode one user's routine or devices:
+
+```text
+core/runtime/  capability contracts, policy, profile loading, state store
+core/modules/  plug-in capabilities
+integration/   Hub worker, command polling, external control plane bridges
+branding/      media-facing brand kits
+profiles/      user preferences, sources, goals, devices, policies
+output/        local renders, state, logs, generated assets
+```
+
+Capability contract:
+
+```python
+CapabilitySpec(
+    id="creator.video_render",
+    name="Video Render",
+    description="Render a public MP4 from a script/topic",
+    category="production",
+    inputs_schema={...},
+    outputs_schema={...},
+    permissions_required=["video.render", "hub.report"],
+    required_capabilities=[],
+    triggers_supported=["hub_job", "cli"],
+    async_mode=True,
+    writes_state=True,
+    network_access=True,
+    hardware_access=False,
+    edge_compatible=True,
+    hub_compatible=True,
+)
+```
+
+Profiles are JSON files under `profiles/` and hold preferences, sources, goals, devices, and policy defaults. Modules should read profile context from the runtime instead of embedding personal assumptions.
 
 ## CLI Commands
 
@@ -189,6 +238,13 @@ The repository also includes exploratory modules that are not the reviewer-criti
 - `core/queue_handler.py`: JSON/n8n queue scaffold; local processing path is a placeholder.
 
 These are kept as internal experiments. The shipped product surface is the terminal video worker, Hub integration, VideoLM render path, and NotebookLM bridge.
+
+## Roadmap
+
+1. **Runtime solidification:** register video/Hub/NotebookLM as first-class capabilities, expose capability lists to the Hub, and route module execution through policy checks.
+2. **Agent layer:** event bus, task graph, browser operator, shell guardrails, and memory briefs.
+3. **Ambient and physical layer:** Termux/edge adapters, voice command router, MQTT/HMAC bridge, ESP32/sensor capabilities, and safe-mode policies.
+4. **Ecosystem:** external module SDK, reusable recipes, capability catalog, and third-party profile packs.
 
 ## Project Structure
 
