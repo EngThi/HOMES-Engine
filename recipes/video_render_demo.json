@@ -2,6 +2,10 @@
   "id": "video_render_demo",
   "name": "Video render demo",
   "description": "Render a short MP4 through the production video capability.",
+  "required_inputs": ["topic", "script"],
+  "input_defaults": {
+    "brand": "demo"
+  },
   "steps": [
     {
       "id": "render",

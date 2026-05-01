@@ -294,6 +294,29 @@ python3 main.py --run-recipe video_render_demo \
   --recipe-inputs '{"topic":"HOMES demo","script":"A short HOMES demo.","brand":"demo"}'
 ```
 
+Recipe files live in `recipes/*.json` and support:
+
+```json
+{
+  "id": "video_render_demo",
+  "required_inputs": ["topic", "script"],
+  "input_defaults": {"brand": "demo"},
+  "steps": [
+    {
+      "id": "render",
+      "capability": "production.video_render",
+      "args": {
+        "script": "{{inputs.script}}",
+        "topic": "{{inputs.topic}}",
+        "brand": "{{inputs.brand}}"
+      }
+    }
+  ]
+}
+```
+
+The recipe runner validates duplicate step ids, required inputs, missing template values, and missing capabilities before executing. If a step returns `{"status":"error"}`, execution stops unless that step has `"continue_on_error": true`.
+
 The Hub can run a recipe directly:
 
 ```json

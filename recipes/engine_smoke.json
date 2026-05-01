@@ -2,6 +2,7 @@
   "id": "engine_smoke",
   "name": "Engine smoke check",
   "description": "Fast non-rendering recipe that checks the hosted demo URL and VideoLM health.",
+  "required_inputs": [],
   "steps": [
     {
       "id": "demo_url",
