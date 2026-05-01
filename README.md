@@ -257,6 +257,7 @@ The repository also includes exploratory modules that are not the reviewer-criti
 These are kept as internal experiments. The shipped product surface is the terminal video worker, Hub integration, VideoLM render path, and NotebookLM bridge.
 
 The worker telemetry also publishes a compact capability catalog (`capabilities_count` and `capabilities`) so the HOMES Hub/MCP side can expose `get_engine_capabilities` without hardcoding this repository.
+Telemetry also includes `recent_runtime_events` and `recent_command_results` so the Hub can show whether a remote capability command ran, failed, or produced an output.
 
 The Hub can also invoke a generic capability command through its existing command poller:
 

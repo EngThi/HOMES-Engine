@@ -154,6 +154,25 @@ def test_push_telemetry_includes_capability_catalog(monkeypatch):
     assert any(item["id"] == "production.video_render" for item in payload["capabilities"])
 
 
+def test_push_telemetry_includes_recent_runtime_events(monkeypatch, tmp_path):
+    calls = {}
+
+    def fake_post(url, data, headers, timeout):
+        calls.update({"url": url, "data": data, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(hub_client, "HUB_BASE", "https://homes.chefthi.hackclub.app")
+    monkeypatch.setattr(hub_client.requests, "post", fake_post)
+
+    from core.runtime import StateStore
+
+    StateStore().append_event("capability.completed", {"id": "demo"})
+    assert hub_client.push_telemetry()
+    payload = json.loads(calls["data"].decode())
+    assert payload["recent_runtime_events"][0]["event_type"] == "capability.completed"
+
+
 def test_execute_capability_command_runs_runtime_capability(monkeypatch):
     captured = {}
 
@@ -181,6 +200,7 @@ def test_execute_capability_command_runs_runtime_capability(monkeypatch):
     assert captured["capability_id"] == "integration.hosted_demo_url"
     assert captured["args"] == {"hello": "world"}
     assert captured["engine_id"] == hub_client.ENGINE_ID
+    assert hub_client.COMMAND_RESULTS[-1]["command"] == "run_capability"
 
 
 def test_execute_capability_command_accepts_legacy_args_shape(monkeypatch):
@@ -212,3 +232,27 @@ def test_execute_capability_command_requires_capability_id():
 
     assert result["status"] == "error"
     assert "capability_id" in result["error"]
+
+
+def test_execute_command_remembers_unknown_command():
+    result = hub_client.execute_command({"command": "does_not_exist", "args": []})
+
+    assert result["status"] == "error"
+    assert hub_client.COMMAND_RESULTS[-1]["result"]["error"] == "unknown command: does_not_exist"
+
+
+def test_push_telemetry_includes_recent_command_results(monkeypatch):
+    calls = {}
+
+    def fake_post(url, data, headers, timeout):
+        calls.update({"url": url, "data": data, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    hub_client.COMMAND_RESULTS.clear()
+    hub_client._remember_command_result("status", {"status": "completed"})
+    monkeypatch.setattr(hub_client, "HUB_BASE", "https://homes.chefthi.hackclub.app")
+    monkeypatch.setattr(hub_client.requests, "post", fake_post)
+
+    assert hub_client.push_telemetry()
+    payload = json.loads(calls["data"].decode())
+    assert payload["recent_command_results"][0]["command"] == "status"

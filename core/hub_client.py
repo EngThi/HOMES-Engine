@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 HUB_BASE   = os.getenv("HOMES_HUB_URL", "http://localhost:8080").rstrip("/")
 HUB_SECRET = os.getenv("HUB_SECRET", "homes_secret_dev")
 ENGINE_ID  = os.getenv("ENGINE_ID", f"engine_{platform.node()}")
+COMMAND_RESULTS = []
+MAX_COMMAND_RESULTS = 20
 
 
 def _sign(payload: dict) -> str:
@@ -269,6 +271,14 @@ def _get_local_telemetry() -> dict:
         ]
     except Exception as e:
         logger.warning(f"Falha ao anexar capabilities na telemetria: {e}")
+    try:
+        from core.runtime import StateStore
+
+        telemetry["recent_runtime_events"] = StateStore().recent_events(limit=10)
+    except Exception as e:
+        logger.warning(f"Falha ao anexar eventos runtime na telemetria: {e}")
+    if COMMAND_RESULTS:
+        telemetry["recent_command_results"] = COMMAND_RESULTS[-MAX_COMMAND_RESULTS:]
     # Disco
     try:
         usage = shutil.disk_usage(os.path.expanduser("~"))
@@ -341,13 +351,16 @@ def execute_command(cmd_obj: dict):
         topic = args[0] if args else "interesting tech fact"
         # Import local para evitar circular
         from integration.worker import submit_video_job
-        submit_video_job(topic)
+        script_path = submit_video_job(topic)
+        return _remember_command_result(cmd, {"status": "queued", "script_path": script_path})
 
     elif cmd == "run_module":
         module_name = args[0] if args else None
         if module_name:
             from core.modules import run_module
-            run_module(module_name, args[1:])
+            result = run_module(module_name, args[1:])
+            return _remember_command_result(cmd, {"status": "completed", "module": module_name, "output": result})
+        return _remember_command_result(cmd, {"status": "error", "error": "module name is required"})
 
     elif cmd == "run_capability":
         return execute_capability_command(cmd_obj)
@@ -360,12 +373,15 @@ def execute_command(cmd_obj: dict):
             subprocess.run(["espeak", msg], capture_output=True, timeout=5)
         except Exception:
             pass
+        return _remember_command_result(cmd, {"status": "completed", "message": msg})
 
     elif cmd == "status":
         push_telemetry()
+        return _remember_command_result(cmd, {"status": "completed"})
 
     else:
         logger.warning(f"[HUB CMD] Comando desconhecido: {cmd}")
+        return _remember_command_result(cmd, {"status": "error", "error": f"unknown command: {cmd}"})
 
 
 def execute_capability_command(cmd_obj: dict) -> dict:
@@ -375,7 +391,7 @@ def execute_capability_command(cmd_obj: dict) -> dict:
     if not capability_id:
         result = {"status": "error", "error": "capability_id is required"}
         logger.warning(f"[HUB CAPABILITY] {result['error']}")
-        return result
+        return _remember_command_result("run_capability", result)
 
     capability_args = payload.get("args") or payload.get("capability_args") or {}
     profile_name = payload.get("profile") or payload.get("profile_id") or "default"
@@ -393,11 +409,11 @@ def execute_capability_command(cmd_obj: dict) -> dict:
         output = run_capability(capability_id, args=capability_args, context=context)
         result = {"status": "completed", "capability_id": capability_id, "output": output}
         logger.info(f"[HUB CAPABILITY] {capability_id} completed")
-        return result
+        return _remember_command_result("run_capability", result)
     except Exception as e:
         result = {"status": "error", "capability_id": capability_id, "error": str(e)}
         logger.error(f"[HUB CAPABILITY] {capability_id} failed: {e}")
-        return result
+        return _remember_command_result("run_capability", result)
 
 
 def _capability_payload(cmd_obj: dict) -> dict:
@@ -414,6 +430,18 @@ def _capability_payload(cmd_obj: dict) -> dict:
     elif len(args) > 1:
         payload["args"] = {"value": args[1:]}
     return payload
+
+
+def _remember_command_result(command: str, result: dict) -> dict:
+    record = {
+        "command": command,
+        "result": result,
+        "timestamp": time.time(),
+        "engine_id": ENGINE_ID,
+    }
+    COMMAND_RESULTS.append(record)
+    del COMMAND_RESULTS[:-MAX_COMMAND_RESULTS]
+    return result
 
 
 # ---------------------------------------------------------------------------
