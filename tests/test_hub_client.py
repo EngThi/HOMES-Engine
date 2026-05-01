@@ -152,6 +152,7 @@ def test_push_telemetry_includes_capability_catalog(monkeypatch):
     payload = json.loads(calls["data"].decode())
     assert payload["capabilities_count"] >= 1
     assert any(item["id"] == "production.video_render" for item in payload["capabilities"])
+    assert any(item["id"] == "engine_smoke" for item in payload["recipes"])
 
 
 def test_push_telemetry_includes_recent_runtime_events(monkeypatch, tmp_path):
@@ -225,6 +226,54 @@ def test_execute_capability_command_accepts_legacy_args_shape(monkeypatch):
         "capability_id": "integration.hosted_demo_url",
         "args": {"hello": "world"},
     }
+
+
+def test_execute_recipe_command_runs_runtime_recipe(monkeypatch):
+    captured = {}
+
+    def fake_run_recipe(recipe_id, inputs=None, context=None):
+        captured["recipe_id"] = recipe_id
+        captured["inputs"] = inputs
+        captured["engine_id"] = context.engine_id
+        return {"status": "completed"}
+
+    monkeypatch.setattr("core.runtime.run_recipe", fake_run_recipe)
+
+    result = hub_client.execute_command(
+        {
+            "command": "run_recipe",
+            "args": [
+                {
+                    "recipe_id": "engine_smoke",
+                    "inputs": {"topic": "HOMES"},
+                }
+            ],
+        }
+    )
+
+    assert result["status"] == "completed"
+    assert captured == {
+        "recipe_id": "engine_smoke",
+        "inputs": {"topic": "HOMES"},
+        "engine_id": hub_client.ENGINE_ID,
+    }
+    assert hub_client.COMMAND_RESULTS[-1]["command"] == "run_recipe"
+
+
+def test_execute_recipe_command_accepts_legacy_args_shape(monkeypatch):
+    captured = {}
+
+    def fake_run_recipe(recipe_id, inputs=None, context=None):
+        captured["recipe_id"] = recipe_id
+        captured["inputs"] = inputs
+        return {"status": "completed"}
+
+    monkeypatch.setattr("core.runtime.run_recipe", fake_run_recipe)
+
+    result = hub_client.execute_command({"command": "run_recipe", "args": ["engine_smoke", {"topic": "HOMES"}]})
+
+    assert result["status"] == "completed"
+    assert captured == {"recipe_id": "engine_smoke", "inputs": {"topic": "HOMES"}}
 
 
 def test_execute_capability_command_requires_capability_id():

@@ -269,6 +269,9 @@ def _get_local_telemetry() -> dict:
             }
             for capability in capabilities
         ]
+        from core.runtime import list_recipes
+
+        telemetry["recipes"] = list_recipes()
     except Exception as e:
         logger.warning(f"Falha ao anexar capabilities na telemetria: {e}")
     try:
@@ -365,6 +368,9 @@ def execute_command(cmd_obj: dict):
     elif cmd == "run_capability":
         return execute_capability_command(cmd_obj)
 
+    elif cmd == "run_recipe":
+        return execute_recipe_command(cmd_obj)
+
     elif cmd == "speak":
         msg = " ".join(args)
         logger.info(f"[SPEAK] {msg}")
@@ -416,6 +422,37 @@ def execute_capability_command(cmd_obj: dict) -> dict:
         return _remember_command_result("run_capability", result)
 
 
+def execute_recipe_command(cmd_obj: dict) -> dict:
+    """Run a declarative runtime recipe from a Hub command object."""
+    payload = _recipe_payload(cmd_obj)
+    recipe_id = payload.get("recipe_id") or payload.get("recipeId") or payload.get("id")
+    if not recipe_id:
+        result = {"status": "error", "error": "recipe_id is required"}
+        logger.warning(f"[HUB RECIPE] {result['error']}")
+        return _remember_command_result("run_recipe", result)
+
+    inputs = payload.get("inputs") or {}
+    profile_name = payload.get("profile") or payload.get("profile_id") or "default"
+
+    try:
+        from core.runtime import CapabilityContext, StateStore, load_profile, run_recipe
+
+        context = CapabilityContext(
+            profile=load_profile(profile_name),
+            state=StateStore(),
+            event={"source": "hub_command", "command": cmd_obj},
+            engine_id=ENGINE_ID,
+        )
+        output = run_recipe(recipe_id, inputs=inputs, context=context)
+        result = {"status": "completed", "recipe_id": recipe_id, "output": output}
+        logger.info(f"[HUB RECIPE] {recipe_id} completed")
+        return _remember_command_result("run_recipe", result)
+    except Exception as e:
+        result = {"status": "error", "recipe_id": recipe_id, "error": str(e)}
+        logger.error(f"[HUB RECIPE] {recipe_id} failed: {e}")
+        return _remember_command_result("run_recipe", result)
+
+
 def _capability_payload(cmd_obj: dict) -> dict:
     args = cmd_obj.get("args") or []
     if isinstance(args, dict):
@@ -429,6 +466,22 @@ def _capability_payload(cmd_obj: dict) -> dict:
         payload["args"] = args[1]
     elif len(args) > 1:
         payload["args"] = {"value": args[1:]}
+    return payload
+
+
+def _recipe_payload(cmd_obj: dict) -> dict:
+    args = cmd_obj.get("args") or []
+    if isinstance(args, dict):
+        return args
+    if not args:
+        return {}
+    if len(args) == 1 and isinstance(args[0], dict):
+        return args[0]
+    payload = {"recipe_id": args[0]}
+    if len(args) > 1 and isinstance(args[1], dict):
+        payload["inputs"] = args[1]
+    elif len(args) > 1:
+        payload["inputs"] = {"value": args[1:]}
     return payload
 
 

@@ -10,6 +10,7 @@ def test_default_registry_lists_production_capabilities_without_experimental():
     registry = build_default_registry()
     ids = {item["id"] for item in registry.list()}
 
+    assert "agent.runtime_manifest" in ids
     assert "integration.hosted_demo_url" in ids
     assert "integration.videolm_health" in ids
     assert "production.video_render" in ids
@@ -32,6 +33,17 @@ def test_run_capability_uses_policy_from_profile():
     result = run_capability("integration.hosted_demo_url", context=context)
 
     assert result["url"].endswith("/engine-demo")
+
+
+def test_runtime_manifest_capability_includes_recipes():
+    profile = load_profile("default")
+    context = CapabilityContext(profile=profile)
+
+    result = run_capability("agent.runtime_manifest", context=context)
+
+    assert result["name"] == "HOMES-Engine"
+    assert result["capabilities_count"] >= 1
+    assert any(item["id"] == "engine_smoke" for item in result["recipes"])
 
 
 def test_run_capability_blocks_missing_permission():

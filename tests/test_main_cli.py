@@ -40,6 +40,13 @@ def test_print_manifest_summary_success(monkeypatch, capsys):
     assert "VideoLM Factory" in capsys.readouterr().out
 
 
+def test_print_runtime_manifest(capsys):
+    assert main.print_runtime_manifest() is True
+    output = capsys.readouterr().out
+    assert "HOMES-Engine" in output
+    assert "agent.runtime_manifest" in output
+
+
 def test_print_hosted_demo(monkeypatch, capsys):
     monkeypatch.setattr(main, "engine_demo_url", lambda: "https://54-162-84-165.sslip.io/engine-demo")
 

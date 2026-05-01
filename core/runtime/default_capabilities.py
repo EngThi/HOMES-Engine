@@ -18,6 +18,7 @@ from core.videolm_client import (
 
 from .capabilities import CapabilityContext, CapabilityRegistry, CapabilitySpec
 from .events import record_event
+from .manifest import build_runtime_manifest
 from .policy import PolicyEngine
 from .recipes import list_recipes, run_recipe
 
@@ -72,6 +73,26 @@ def build_default_registry() -> CapabilityRegistry:
     )
     def hosted_demo_url(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
         return {"url": engine_demo_url()}
+
+    @registry.register(
+        CapabilitySpec(
+            id="agent.runtime_manifest",
+            name="Runtime Manifest",
+            description="Return the local HOMES-Engine capability, recipe, Hub, and profile manifest.",
+            category="agent",
+            outputs_schema={"type": "object"},
+            permissions_required=["profile.read"],
+            triggers_supported=["cli", "hub_command"],
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def runtime_manifest(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        return build_runtime_manifest(
+            registry,
+            profile=context.profile,
+            include_experimental=bool(args.get("include_experimental", True)),
+        )
 
     @registry.register(
         CapabilitySpec(

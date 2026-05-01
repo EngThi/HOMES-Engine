@@ -13,7 +13,7 @@ from core.videolm_client import (
     resolve_video_url,
     submit_notebooklm_video,
 )
-from core.runtime import CapabilityContext, StateStore, list_recipes, load_profile, run_recipe
+from core.runtime import CapabilityContext, StateStore, build_runtime_manifest, list_recipes, load_profile, run_recipe
 from core.runtime.default_capabilities import build_default_registry, parse_capability_args, run_capability
 
 logger = get_logger(__name__)
@@ -247,6 +247,12 @@ def print_capabilities(include_experimental=False):
     print(json.dumps(registry.list(include_experimental=include_experimental), indent=2))
     return True
 
+def print_runtime_manifest(profile_name="default", include_experimental=True):
+    registry = build_default_registry()
+    profile = load_profile(profile_name)
+    print(json.dumps(build_runtime_manifest(registry, profile, include_experimental=include_experimental), indent=2))
+    return True
+
 def run_capability_from_cli(capability_id, raw_args="", profile_name="default"):
     profile = load_profile(profile_name)
     context = CapabilityContext(
@@ -335,6 +341,7 @@ if __name__ == "__main__":
     parser.add_argument("--notebook-id", default="", help="NotebookLM notebook existente")
     parser.add_argument("--profile-id", default="default", help="Perfil NotebookLM")
     parser.add_argument("--capabilities", action="store_true", help="Lista capabilities registradas no runtime")
+    parser.add_argument("--runtime-manifest", action="store_true", help="Mostra manifest local do runtime HOMES-Engine")
     parser.add_argument("--include-experimental", action="store_true", help="Inclui capabilities experimentais na listagem")
     parser.add_argument("--run-capability", help="Executa uma capability por id")
     parser.add_argument("--capability-args", default="", help="JSON object com argumentos para --run-capability")
@@ -349,6 +356,8 @@ if __name__ == "__main__":
         sys.exit(0 if print_health() else 1)
     elif args.capabilities:
         print_capabilities(include_experimental=args.include_experimental)
+    elif args.runtime_manifest:
+        print_runtime_manifest(args.profile, include_experimental=args.include_experimental)
     elif args.run_capability:
         try:
             run_capability_from_cli(args.run_capability, args.capability_args, args.profile)

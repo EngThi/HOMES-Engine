@@ -117,6 +117,7 @@ python3 main.py --run-capability production.video_render \
 python3 main.py --run-capability production.notebooklm_poll \
   --capability-args '{"project_id":"engine_hackclub_demo"}'
 python3 main.py --capabilities --include-experimental
+python3 main.py --runtime-manifest
 python3 main.py --recipes
 python3 main.py --run-recipe engine_smoke
 ```
@@ -133,6 +134,7 @@ python3 main.py --hub
 python3 main.py --daemon
 python3 main.py --capabilities
 python3 main.py --capabilities --include-experimental
+python3 main.py --runtime-manifest
 python3 main.py --run-capability integration.hosted_demo_url
 python3 main.py --run-capability production.video_render \
   --capability-args '{"script_path":"scripts/e2e_engine_test.txt","brand":"demo"}'
@@ -260,8 +262,15 @@ The repository also includes exploratory modules that are not the reviewer-criti
 
 These are kept as internal experiments. The shipped product surface is the terminal video worker, Hub integration, VideoLM render path, and NotebookLM bridge.
 
-The worker telemetry also publishes a compact capability catalog (`capabilities_count` and `capabilities`) so the HOMES Hub/MCP side can expose `get_engine_capabilities` without hardcoding this repository.
+The worker telemetry also publishes a compact capability and recipe catalog (`capabilities_count`, `capabilities`, and `recipes`) so the HOMES Hub/MCP side can expose `get_engine_capabilities` and `list_engine_recipes` without hardcoding this repository.
 Telemetry also includes `recent_runtime_events` and `recent_command_results` so the Hub can show whether a remote capability command ran, failed, or produced an output.
+
+The local runtime manifest includes the capability catalog, recipe catalog, Hub contract, engine id, platform, and profile policy:
+
+```bash
+python3 main.py --runtime-manifest
+python3 main.py --run-capability agent.runtime_manifest
+```
 
 The Hub can also invoke a generic capability command through its existing command poller:
 
@@ -283,6 +292,39 @@ Recipes compose multiple capabilities into reusable workflows. Example recipe co
 ```bash
 python3 main.py --run-recipe video_render_demo \
   --recipe-inputs '{"topic":"HOMES demo","script":"A short HOMES demo.","brand":"demo"}'
+```
+
+The Hub can run a recipe directly:
+
+```json
+{
+  "command": "run_recipe",
+  "args": [
+    {
+      "recipe_id": "engine_smoke",
+      "inputs": {},
+      "profile": "default"
+    }
+  ]
+}
+```
+
+Or through the generic capability command:
+
+```json
+{
+  "command": "run_capability",
+  "args": [
+    {
+      "capability_id": "agent.recipe_run",
+      "args": {
+        "recipe_id": "engine_smoke",
+        "inputs": {}
+      },
+      "profile": "default"
+    }
+  ]
+}
 ```
 
 Legacy shape is also accepted:
