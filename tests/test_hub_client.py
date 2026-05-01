@@ -77,6 +77,52 @@ def test_report_job_done_includes_public_video_url_from_sidecar(monkeypatch, tmp
     assert payload["videoUrl"] == "https://54-162-84-165.sslip.io/videos/job1.mp4"
 
 
+def test_report_job_done_includes_video_metadata(monkeypatch, tmp_path):
+    calls = {}
+    video_path = tmp_path / "HOMES_job1.mp4"
+    video_path.write_bytes(b"mp4-bytes")
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stderr = ""
+        stdout = json.dumps(
+            {
+                "streams": [
+                    {
+                        "width": 1080,
+                        "height": 1920,
+                        "r_frame_rate": "30/1",
+                        "codec_name": "h264",
+                    }
+                ],
+                "format": {"duration": "20.123456"},
+            }
+        )
+
+    def fake_post(url, data, headers, timeout):
+        calls.update({"url": url, "data": data, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr(hub_client, "HUB_BASE", "https://homes.chefthi.hackclub.app")
+    monkeypatch.setattr(hub_client.requests, "post", fake_post)
+    monkeypatch.setattr(hub_client.subprocess, "run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    assert hub_client.report_job_done("job1", str(video_path))
+    payload = json.loads(calls["data"].decode())
+    assert payload["size_bytes"] == len(b"mp4-bytes")
+    assert payload["duration_seconds"] == 20.123
+    assert payload["width"] == 1080
+    assert payload["height"] == 1920
+    assert payload["fps"] == 30
+    assert payload["codec"] == "h264"
+
+
+def test_parse_fps_handles_fractional_rates():
+    assert hub_client._parse_fps("30000/1001") == 29.97
+    assert hub_client._parse_fps("30/1") == 30
+    assert hub_client._parse_fps("0/0") == 0
+
+
 def test_push_telemetry_posts_signed(monkeypatch):
     calls = {}
 

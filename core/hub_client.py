@@ -17,6 +17,7 @@ import json
 import logging
 import platform
 import shutil
+import subprocess
 import requests
 from typing import Optional
 from dotenv import load_dotenv
@@ -81,6 +82,87 @@ def _public_video_url(video_path: str) -> str:
     return ""
 
 
+def _video_metadata(video_path: str) -> dict:
+    metadata = {}
+    if not video_path or not os.path.exists(video_path):
+        return metadata
+
+    try:
+        metadata["size_bytes"] = os.path.getsize(video_path)
+    except OSError:
+        pass
+
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height,r_frame_rate,codec_name:format=duration",
+                "-of",
+                "json",
+                video_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.warning(f"Não foi possível ler metadata do vídeo {video_path}: {e}")
+        return metadata
+
+    if result.returncode != 0:
+        logger.warning(f"ffprobe falhou para {video_path}: {result.stderr[:200]}")
+        return metadata
+
+    try:
+        data = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as e:
+        logger.warning(f"ffprobe retornou JSON inválido para {video_path}: {e}")
+        return metadata
+
+    duration = (data.get("format") or {}).get("duration")
+    if duration:
+        try:
+            metadata["duration_seconds"] = round(float(duration), 3)
+        except (TypeError, ValueError):
+            pass
+
+    streams = data.get("streams") or []
+    stream = streams[0] if streams else {}
+    if stream.get("width"):
+        metadata["width"] = int(stream["width"])
+    if stream.get("height"):
+        metadata["height"] = int(stream["height"])
+    if stream.get("codec_name"):
+        metadata["codec"] = stream["codec_name"]
+
+    fps = _parse_fps(stream.get("r_frame_rate", ""))
+    if fps:
+        metadata["fps"] = fps
+
+    return metadata
+
+
+def _parse_fps(value: str) -> float:
+    if not value:
+        return 0
+    try:
+        if "/" in value:
+            numerator, denominator = value.split("/", 1)
+            denominator_float = float(denominator)
+            if denominator_float == 0:
+                return 0
+            return round(float(numerator) / denominator_float, 3)
+        return round(float(value), 3)
+    except (TypeError, ValueError):
+        return 0
+
+
 # ---------------------------------------------------------------------------
 # JOBS DE VÍDEO
 # ---------------------------------------------------------------------------
@@ -131,6 +213,7 @@ def report_job_done(job_id: str, video_path: str) -> bool:
     if video_url:
         payload["video_url"] = video_url
         payload["videoUrl"] = video_url
+    payload.update(_video_metadata(video_path))
     try:
         r = _post_signed(f"/api/projects/{job_id}/complete", payload, timeout=10)
         if not r.ok:
