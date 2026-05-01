@@ -52,6 +52,35 @@ def _post_signed(path: str, payload: dict, timeout: int = 10) -> requests.Respon
     return requests.post(f"{HUB_BASE}{path}", data=body, headers=headers, timeout=timeout)
 
 
+def _public_video_url(video_path: str) -> str:
+    """Best-effort public URL for Hub downloads."""
+    if not video_path:
+        return ""
+    if video_path.startswith(("http://", "https://")):
+        return video_path
+    if video_path.startswith("/videos/"):
+        base_url = os.getenv("VIDEOLM_URL", "").rstrip("/")
+        return f"{base_url}{video_path}" if base_url else ""
+
+    sidecar_path = f"{video_path}.source.json"
+    if os.path.exists(sidecar_path):
+        try:
+            with open(sidecar_path, "r", encoding="utf-8") as f:
+                source = json.load(f)
+            source_url = source.get("video_url") or source.get("videoUrl")
+            if source_url:
+                return source_url
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(f"Não foi possível ler URL pública do vídeo {video_path}: {e}")
+
+    public_base = os.getenv("HOMES_ENGINE_PUBLIC_BASE_URL", "").rstrip("/")
+    public_prefix = os.getenv("HOMES_ENGINE_PUBLIC_VIDEO_PATH", "/videos").strip("/")
+    if public_base and os.path.exists(video_path):
+        return f"{public_base}/{public_prefix}/{os.path.basename(video_path)}"
+
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # JOBS DE VÍDEO
 # ---------------------------------------------------------------------------
@@ -98,6 +127,10 @@ def report_job_done(job_id: str, video_path: str) -> bool:
         "engine_id": ENGINE_ID,
         "timestamp": time.time(),
     }
+    video_url = _public_video_url(video_path)
+    if video_url:
+        payload["video_url"] = video_url
+        payload["videoUrl"] = video_url
     try:
         r = _post_signed(f"/api/projects/{job_id}/complete", payload, timeout=10)
         if not r.ok:

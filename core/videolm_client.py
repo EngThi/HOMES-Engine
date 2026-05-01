@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import json
 import requests
 from pathlib import Path
 from typing import Optional
@@ -330,6 +331,17 @@ def assemble_via_videolm(
                 with open(out_file, "wb") as f:
                     for chunk in dl.iter_content(chunk_size=8192):
                         f.write(chunk)
+
+                with open(f"{out_file}.source.json", "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "project_id": project_id,
+                            "video_url": download_url,
+                            "video_path": video_path,
+                        },
+                        f,
+                        indent=2,
+                    )
 
                 size_mb = os.path.getsize(out_file) / 1_048_576
                 logger.info(f"🎬 Vídeo salvo: {out_file} ({size_mb:.1f} MB)")

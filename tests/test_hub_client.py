@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from core import hub_client
 
@@ -51,6 +52,29 @@ def test_report_job_done_posts_complete(monkeypatch):
 
     assert hub_client.report_job_done("job1", "output.mp4")
     assert calls["url"] == "https://homes.chefthi.hackclub.app/api/projects/job1/complete"
+
+
+def test_report_job_done_includes_public_video_url_from_sidecar(monkeypatch, tmp_path):
+    calls = {}
+    video_path = tmp_path / "HOMES_job1.mp4"
+    video_path.write_bytes(b"mp4")
+    Path(f"{video_path}.source.json").write_text(
+        json.dumps({"video_url": "https://54-162-84-165.sslip.io/videos/job1.mp4"}),
+        encoding="utf-8",
+    )
+
+    def fake_post(url, data, headers, timeout):
+        calls.update({"url": url, "data": data, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr(hub_client, "HUB_BASE", "https://homes.chefthi.hackclub.app")
+    monkeypatch.setattr(hub_client.requests, "post", fake_post)
+
+    assert hub_client.report_job_done("job1", str(video_path))
+    payload = json.loads(calls["data"].decode())
+    assert payload["video_path"] == str(video_path)
+    assert payload["video_url"] == "https://54-162-84-165.sslip.io/videos/job1.mp4"
+    assert payload["videoUrl"] == "https://54-162-84-165.sslip.io/videos/job1.mp4"
 
 
 def test_push_telemetry_posts_signed(monkeypatch):
