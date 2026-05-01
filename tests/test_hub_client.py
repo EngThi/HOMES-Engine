@@ -152,3 +152,63 @@ def test_push_telemetry_includes_capability_catalog(monkeypatch):
     payload = json.loads(calls["data"].decode())
     assert payload["capabilities_count"] >= 1
     assert any(item["id"] == "production.video_render" for item in payload["capabilities"])
+
+
+def test_execute_capability_command_runs_runtime_capability(monkeypatch):
+    captured = {}
+
+    def fake_run_capability(capability_id, args=None, context=None):
+        captured["capability_id"] = capability_id
+        captured["args"] = args
+        captured["engine_id"] = context.engine_id
+        return {"ok": True}
+
+    monkeypatch.setattr("core.runtime.default_capabilities.run_capability", fake_run_capability)
+
+    result = hub_client.execute_command(
+        {
+            "command": "run_capability",
+            "args": [
+                {
+                    "capability_id": "integration.hosted_demo_url",
+                    "args": {"hello": "world"},
+                }
+            ],
+        }
+    )
+
+    assert result["status"] == "completed"
+    assert captured["capability_id"] == "integration.hosted_demo_url"
+    assert captured["args"] == {"hello": "world"}
+    assert captured["engine_id"] == hub_client.ENGINE_ID
+
+
+def test_execute_capability_command_accepts_legacy_args_shape(monkeypatch):
+    captured = {}
+
+    def fake_run_capability(capability_id, args=None, context=None):
+        captured["capability_id"] = capability_id
+        captured["args"] = args
+        return {"ok": True}
+
+    monkeypatch.setattr("core.runtime.default_capabilities.run_capability", fake_run_capability)
+
+    result = hub_client.execute_command(
+        {
+            "command": "run_capability",
+            "args": ["integration.hosted_demo_url", {"hello": "world"}],
+        }
+    )
+
+    assert result["status"] == "completed"
+    assert captured == {
+        "capability_id": "integration.hosted_demo_url",
+        "args": {"hello": "world"},
+    }
+
+
+def test_execute_capability_command_requires_capability_id():
+    result = hub_client.execute_command({"command": "run_capability", "args": []})
+
+    assert result["status"] == "error"
+    assert "capability_id" in result["error"]

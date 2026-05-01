@@ -258,6 +258,30 @@ These are kept as internal experiments. The shipped product surface is the termi
 
 The worker telemetry also publishes a compact capability catalog (`capabilities_count` and `capabilities`) so the HOMES Hub/MCP side can expose `get_engine_capabilities` without hardcoding this repository.
 
+The Hub can also invoke a generic capability command through its existing command poller:
+
+```json
+{
+  "command": "run_capability",
+  "args": [
+    {
+      "capability_id": "integration.hosted_demo_url",
+      "args": {},
+      "profile": "default"
+    }
+  ]
+}
+```
+
+Legacy shape is also accepted:
+
+```json
+{
+  "command": "run_capability",
+  "args": ["integration.hosted_demo_url", {}]
+}
+```
+
 ## Roadmap
 
 1. **Runtime solidification:** register video/Hub/NotebookLM as first-class capabilities, expose capability lists to the Hub, and route module execution through policy checks.

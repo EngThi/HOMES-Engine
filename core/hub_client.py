@@ -349,6 +349,9 @@ def execute_command(cmd_obj: dict):
             from core.modules import run_module
             run_module(module_name, args[1:])
 
+    elif cmd == "run_capability":
+        return execute_capability_command(cmd_obj)
+
     elif cmd == "speak":
         msg = " ".join(args)
         logger.info(f"[SPEAK] {msg}")
@@ -363,6 +366,54 @@ def execute_command(cmd_obj: dict):
 
     else:
         logger.warning(f"[HUB CMD] Comando desconhecido: {cmd}")
+
+
+def execute_capability_command(cmd_obj: dict) -> dict:
+    """Run a runtime capability from a Hub command object."""
+    payload = _capability_payload(cmd_obj)
+    capability_id = payload.get("capability_id") or payload.get("capabilityId") or payload.get("id")
+    if not capability_id:
+        result = {"status": "error", "error": "capability_id is required"}
+        logger.warning(f"[HUB CAPABILITY] {result['error']}")
+        return result
+
+    capability_args = payload.get("args") or payload.get("capability_args") or {}
+    profile_name = payload.get("profile") or payload.get("profile_id") or "default"
+
+    try:
+        from core.runtime import CapabilityContext, StateStore, load_profile
+        from core.runtime.default_capabilities import run_capability
+
+        context = CapabilityContext(
+            profile=load_profile(profile_name),
+            state=StateStore(),
+            event={"source": "hub_command", "command": cmd_obj},
+            engine_id=ENGINE_ID,
+        )
+        output = run_capability(capability_id, args=capability_args, context=context)
+        result = {"status": "completed", "capability_id": capability_id, "output": output}
+        logger.info(f"[HUB CAPABILITY] {capability_id} completed")
+        return result
+    except Exception as e:
+        result = {"status": "error", "capability_id": capability_id, "error": str(e)}
+        logger.error(f"[HUB CAPABILITY] {capability_id} failed: {e}")
+        return result
+
+
+def _capability_payload(cmd_obj: dict) -> dict:
+    args = cmd_obj.get("args") or []
+    if isinstance(args, dict):
+        return args
+    if not args:
+        return {}
+    if len(args) == 1 and isinstance(args[0], dict):
+        return args[0]
+    payload = {"capability_id": args[0]}
+    if len(args) > 1 and isinstance(args[1], dict):
+        payload["args"] = args[1]
+    elif len(args) > 1:
+        payload["args"] = {"value": args[1:]}
+    return payload
 
 
 # ---------------------------------------------------------------------------
