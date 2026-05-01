@@ -20,7 +20,14 @@ DEFAULT_PROFILE: Dict[str, Any] = {
     "policies": {
         "network": "allow",
         "allow_hardware": False,
-        "allow_permissions": ["video.render", "hub.report", "profile.read", "state.write"],
+        "allow_permissions": [
+            "video.render",
+            "hub.report",
+            "profile.read",
+            "state.write",
+            "network.read",
+            "network.write",
+        ],
         "deny_permissions": [],
     },
 }

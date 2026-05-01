@@ -107,6 +107,16 @@ CapabilitySpec(
 
 Profiles are JSON files under `profiles/` and hold preferences, sources, goals, devices, and policy defaults. Modules should read profile context from the runtime instead of embedding personal assumptions.
 
+Runtime CLI examples:
+
+```bash
+python3 main.py --capabilities
+python3 main.py --run-capability integration.hosted_demo_url
+python3 main.py --run-capability production.notebooklm_poll \
+  --capability-args '{"project_id":"engine_hackclub_demo"}'
+python3 main.py --capabilities --include-experimental
+```
+
 ## CLI Commands
 
 ```bash
@@ -117,6 +127,9 @@ python3 main.py --demo
 python3 main.py --render scripts/e2e_engine_test.txt
 python3 main.py --hub
 python3 main.py --daemon
+python3 main.py --capabilities
+python3 main.py --capabilities --include-experimental
+python3 main.py --run-capability integration.hosted_demo_url
 ```
 
 NotebookLM:

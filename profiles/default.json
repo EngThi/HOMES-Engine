@@ -13,7 +13,14 @@
   "policies": {
     "network": "allow",
     "allow_hardware": false,
-    "allow_permissions": ["video.render", "hub.report", "profile.read", "state.write"],
+    "allow_permissions": [
+      "video.render",
+      "hub.report",
+      "profile.read",
+      "state.write",
+      "network.read",
+      "network.write"
+    ],
     "deny_permissions": []
   }
 }

@@ -13,6 +13,8 @@ from core.videolm_client import (
     resolve_video_url,
     submit_notebooklm_video,
 )
+from core.runtime import CapabilityContext, StateStore, load_profile
+from core.runtime.default_capabilities import build_default_registry, parse_capability_args, run_capability
 
 logger = get_logger(__name__)
 CYAN, GREEN, YELLOW, RED, RESET = "\033[96m", "\033[92m", "\033[93m", "\033[91m", "\033[0m"
@@ -240,6 +242,23 @@ def poll_notebooklm_from_cli(project_id):
         print(f"{GREEN}Video:{RESET} {video_url}")
     return result
 
+def print_capabilities(include_experimental=False):
+    registry = build_default_registry()
+    print(json.dumps(registry.list(include_experimental=include_experimental), indent=2))
+    return True
+
+def run_capability_from_cli(capability_id, raw_args="", profile_name="default"):
+    profile = load_profile(profile_name)
+    context = CapabilityContext(
+        profile=profile,
+        state=StateStore(),
+        engine_id=os.getenv("ENGINE_ID", "homes-engine"),
+    )
+    args = parse_capability_args(raw_args)
+    result = run_capability(capability_id, args=args, context=context)
+    print(json.dumps(result, indent=2))
+    return result
+
 def main():
     current_brand = "demo"
     with ErrorContext("HOMES-Engine"):
@@ -299,11 +318,24 @@ if __name__ == "__main__":
     parser.add_argument("--live-research", action="store_true", help="Ativa liveResearch no NotebookLM")
     parser.add_argument("--notebook-id", default="", help="NotebookLM notebook existente")
     parser.add_argument("--profile-id", default="default", help="Perfil NotebookLM")
+    parser.add_argument("--capabilities", action="store_true", help="Lista capabilities registradas no runtime")
+    parser.add_argument("--include-experimental", action="store_true", help="Inclui capabilities experimentais na listagem")
+    parser.add_argument("--run-capability", help="Executa uma capability por id")
+    parser.add_argument("--capability-args", default="", help="JSON object com argumentos para --run-capability")
+    parser.add_argument("--profile", default="default", help="Perfil runtime em profiles/<nome>.json")
     
     args = parser.parse_args()
     
     if args.health:
         sys.exit(0 if print_health() else 1)
+    elif args.capabilities:
+        print_capabilities(include_experimental=args.include_experimental)
+    elif args.run_capability:
+        try:
+            run_capability_from_cli(args.run_capability, args.capability_args, args.profile)
+        except Exception as e:
+            print(f"{RED}{e}{RESET}")
+            sys.exit(2)
     elif args.manifest:
         sys.exit(0 if print_manifest_summary() else 1)
     elif args.demo_url:
