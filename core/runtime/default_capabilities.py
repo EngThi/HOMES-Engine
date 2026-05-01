@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from typing import Any, Dict
 
+from core.video_maker import generate_video
 from core.modules import list_modules, run_module
 from core.videolm_client import (
     engine_demo_url,
@@ -14,6 +17,7 @@ from core.videolm_client import (
 )
 
 from .capabilities import CapabilityContext, CapabilityRegistry, CapabilitySpec
+from .events import record_event
 from .policy import PolicyEngine
 
 
@@ -67,6 +71,60 @@ def build_default_registry() -> CapabilityRegistry:
     )
     def hosted_demo_url(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
         return {"url": engine_demo_url()}
+
+    @registry.register(
+        CapabilitySpec(
+            id="production.video_render",
+            name="Video Render",
+            description="Render a public MP4 from a script file or inline script.",
+            category="production",
+            inputs_schema={
+                "type": "object",
+                "properties": {
+                    "script_path": {"type": "string"},
+                    "script": {"type": "string"},
+                    "topic": {"type": "string"},
+                    "brand": {"type": "string"},
+                    "theme": {"type": "string"},
+                },
+            },
+            outputs_schema={
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string"},
+                    "output_path": {"type": "string"},
+                },
+            },
+            permissions_required=["video.render", "network.write", "state.write"],
+            triggers_supported=["cli", "hub_job", "queue"],
+            async_mode=True,
+            writes_state=True,
+            network_access=True,
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def video_render(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        script_path = args.get("script_path") or ""
+        inline_script = args.get("script") or ""
+        topic = args.get("topic") or "HOMES-Engine render"
+        brand = args.get("brand") or args.get("theme") or "demo"
+
+        if not script_path:
+            os.makedirs("queue", exist_ok=True)
+            script_path = os.path.join("queue", f"capability_{int(time.time())}.txt")
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(inline_script.strip() or topic)
+
+        record_event(context, "capability.started", {"id": "production.video_render", "script_path": script_path})
+        output_path = generate_video(script_path, brand_name=brand)
+        if not output_path:
+            record_event(context, "capability.failed", {"id": "production.video_render", "script_path": script_path})
+            return {"status": "error", "script_path": script_path, "output_path": ""}
+
+        result = {"status": "completed", "script_path": script_path, "output_path": output_path}
+        record_event(context, "capability.completed", {"id": "production.video_render", **result})
+        return result
 
     @registry.register(
         CapabilitySpec(
@@ -198,7 +256,9 @@ def run_capability(
     spec = registry.get(capability_id)
     profile = (context.profile if context else {}) or {}
     PolicyEngine(profile.get("policies") or {}).require(spec)
-    return registry.run(capability_id, args or {}, context)
+    active_context = context or CapabilityContext(profile=profile)
+    record_event(active_context, "capability.invoked", {"id": capability_id, "args": args or {}})
+    return registry.run(capability_id, args or {}, active_context)
 
 
 def parse_capability_args(raw: str) -> Dict[str, Any]:

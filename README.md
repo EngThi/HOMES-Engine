@@ -112,6 +112,8 @@ Runtime CLI examples:
 ```bash
 python3 main.py --capabilities
 python3 main.py --run-capability integration.hosted_demo_url
+python3 main.py --run-capability production.video_render \
+  --capability-args '{"script":"A short HOMES-Engine demo.","brand":"demo"}'
 python3 main.py --run-capability production.notebooklm_poll \
   --capability-args '{"project_id":"engine_hackclub_demo"}'
 python3 main.py --capabilities --include-experimental
@@ -130,6 +132,8 @@ python3 main.py --daemon
 python3 main.py --capabilities
 python3 main.py --capabilities --include-experimental
 python3 main.py --run-capability integration.hosted_demo_url
+python3 main.py --run-capability production.video_render \
+  --capability-args '{"script_path":"scripts/e2e_engine_test.txt","brand":"demo"}'
 ```
 
 NotebookLM:
@@ -251,6 +255,8 @@ The repository also includes exploratory modules that are not the reviewer-criti
 - `core/queue_handler.py`: JSON/n8n queue scaffold; local processing path is a placeholder.
 
 These are kept as internal experiments. The shipped product surface is the terminal video worker, Hub integration, VideoLM render path, and NotebookLM bridge.
+
+The worker telemetry also publishes a compact capability catalog (`capabilities_count` and `capabilities`) so the HOMES Hub/MCP side can expose `get_engine_capabilities` without hardcoding this repository.
 
 ## Roadmap
 

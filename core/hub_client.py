@@ -254,6 +254,21 @@ def _get_local_telemetry() -> dict:
         "platform": platform.system(),
         "timestamp": time.strftime("%H:%M:%S"),
     }
+    try:
+        from core.runtime.default_capabilities import build_default_registry
+
+        capabilities = build_default_registry().list(include_experimental=True)
+        telemetry["capabilities_count"] = len(capabilities)
+        telemetry["capabilities"] = [
+            {
+                "id": capability["id"],
+                "category": capability["category"],
+                "experimental": capability["experimental"],
+            }
+            for capability in capabilities
+        ]
+    except Exception as e:
+        logger.warning(f"Falha ao anexar capabilities na telemetria: {e}")
     # Disco
     try:
         usage = shutil.disk_usage(os.path.expanduser("~"))

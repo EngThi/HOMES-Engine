@@ -136,3 +136,19 @@ def test_push_telemetry_posts_signed(monkeypatch):
     assert hub_client.push_telemetry()
     assert calls["url"] == "https://homes.chefthi.hackclub.app/api/sensors"
     assert calls["headers"]["X-Homes-Signature"]
+
+
+def test_push_telemetry_includes_capability_catalog(monkeypatch):
+    calls = {}
+
+    def fake_post(url, data, headers, timeout):
+        calls.update({"url": url, "data": data, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr(hub_client, "HUB_BASE", "https://homes.chefthi.hackclub.app")
+    monkeypatch.setattr(hub_client.requests, "post", fake_post)
+
+    assert hub_client.push_telemetry()
+    payload = json.loads(calls["data"].decode())
+    assert payload["capabilities_count"] >= 1
+    assert any(item["id"] == "production.video_render" for item in payload["capabilities"])
