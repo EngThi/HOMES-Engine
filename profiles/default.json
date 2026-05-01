@@ -19,7 +19,8 @@
       "profile.read",
       "state.write",
       "network.read",
-      "network.write"
+      "network.write",
+      "recipe.run"
     ],
     "deny_permissions": []
   }

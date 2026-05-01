@@ -1,0 +1,16 @@
+{
+  "id": "video_render_demo",
+  "name": "Video render demo",
+  "description": "Render a short MP4 through the production video capability.",
+  "steps": [
+    {
+      "id": "render",
+      "capability": "production.video_render",
+      "args": {
+        "script": "{{inputs.script}}",
+        "topic": "{{inputs.topic}}",
+        "brand": "{{inputs.brand}}"
+      }
+    }
+  ]
+}

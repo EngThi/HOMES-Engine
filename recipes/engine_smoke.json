@@ -1,0 +1,17 @@
+{
+  "id": "engine_smoke",
+  "name": "Engine smoke check",
+  "description": "Fast non-rendering recipe that checks the hosted demo URL and VideoLM health.",
+  "steps": [
+    {
+      "id": "demo_url",
+      "capability": "integration.hosted_demo_url",
+      "args": {}
+    },
+    {
+      "id": "health",
+      "capability": "integration.videolm_health",
+      "args": {}
+    }
+  ]
+}

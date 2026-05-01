@@ -19,6 +19,7 @@ from core.videolm_client import (
 from .capabilities import CapabilityContext, CapabilityRegistry, CapabilitySpec
 from .events import record_event
 from .policy import PolicyEngine
+from .recipes import list_recipes, run_recipe
 
 
 def build_default_registry() -> CapabilityRegistry:
@@ -198,6 +199,50 @@ def build_default_registry() -> CapabilityRegistry:
         if video_url:
             result["resolvedVideoUrl"] = video_url
         return result
+
+    @registry.register(
+        CapabilitySpec(
+            id="agent.recipe_list",
+            name="List Recipes",
+            description="List available multi-step capability recipes.",
+            category="agent",
+            outputs_schema={"type": "object"},
+            permissions_required=["profile.read"],
+            triggers_supported=["cli", "hub_command"],
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def recipe_list(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        return {"recipes": list_recipes(args.get("root", "recipes"))}
+
+    @registry.register(
+        CapabilitySpec(
+            id="agent.recipe_run",
+            name="Run Recipe",
+            description="Run a declarative multi-step capability recipe.",
+            category="agent",
+            inputs_schema={
+                "type": "object",
+                "required": ["recipe_id"],
+                "properties": {
+                    "recipe_id": {"type": "string"},
+                    "inputs": {"type": "object"},
+                },
+            },
+            outputs_schema={"type": "object"},
+            permissions_required=["recipe.run", "state.write"],
+            triggers_supported=["cli", "hub_command"],
+            writes_state=True,
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def recipe_run(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        recipe_id = args.get("recipe_id") or args.get("id")
+        if not recipe_id:
+            raise ValueError("recipe_id is required")
+        return run_recipe(recipe_id, inputs=args.get("inputs") or {}, context=context, root=args.get("root", "recipes"))
 
     @registry.register(
         CapabilitySpec(

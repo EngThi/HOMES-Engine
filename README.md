@@ -117,6 +117,8 @@ python3 main.py --run-capability production.video_render \
 python3 main.py --run-capability production.notebooklm_poll \
   --capability-args '{"project_id":"engine_hackclub_demo"}'
 python3 main.py --capabilities --include-experimental
+python3 main.py --recipes
+python3 main.py --run-recipe engine_smoke
 ```
 
 ## CLI Commands
@@ -134,6 +136,8 @@ python3 main.py --capabilities --include-experimental
 python3 main.py --run-capability integration.hosted_demo_url
 python3 main.py --run-capability production.video_render \
   --capability-args '{"script_path":"scripts/e2e_engine_test.txt","brand":"demo"}'
+python3 main.py --recipes
+python3 main.py --run-recipe engine_smoke
 ```
 
 NotebookLM:
@@ -272,6 +276,13 @@ The Hub can also invoke a generic capability command through its existing comman
     }
   ]
 }
+```
+
+Recipes compose multiple capabilities into reusable workflows. Example recipe command:
+
+```bash
+python3 main.py --run-recipe video_render_demo \
+  --recipe-inputs '{"topic":"HOMES demo","script":"A short HOMES demo.","brand":"demo"}'
 ```
 
 Legacy shape is also accepted:

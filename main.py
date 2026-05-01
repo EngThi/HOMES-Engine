@@ -13,7 +13,7 @@ from core.videolm_client import (
     resolve_video_url,
     submit_notebooklm_video,
 )
-from core.runtime import CapabilityContext, StateStore, load_profile
+from core.runtime import CapabilityContext, StateStore, list_recipes, load_profile, run_recipe
 from core.runtime.default_capabilities import build_default_registry, parse_capability_args, run_capability
 
 logger = get_logger(__name__)
@@ -259,6 +259,22 @@ def run_capability_from_cli(capability_id, raw_args="", profile_name="default"):
     print(json.dumps(result, indent=2))
     return result
 
+def print_recipes():
+    print(json.dumps(list_recipes(), indent=2))
+    return True
+
+def run_recipe_from_cli(recipe_id, raw_inputs="", profile_name="default"):
+    profile = load_profile(profile_name)
+    context = CapabilityContext(
+        profile=profile,
+        state=StateStore(),
+        engine_id=os.getenv("ENGINE_ID", "homes-engine"),
+    )
+    inputs = parse_capability_args(raw_inputs)
+    result = run_recipe(recipe_id, inputs=inputs, context=context)
+    print(json.dumps(result, indent=2))
+    return result
+
 def main():
     current_brand = "demo"
     with ErrorContext("HOMES-Engine"):
@@ -323,6 +339,9 @@ if __name__ == "__main__":
     parser.add_argument("--run-capability", help="Executa uma capability por id")
     parser.add_argument("--capability-args", default="", help="JSON object com argumentos para --run-capability")
     parser.add_argument("--profile", default="default", help="Perfil runtime em profiles/<nome>.json")
+    parser.add_argument("--recipes", action="store_true", help="Lista recipes disponíveis")
+    parser.add_argument("--run-recipe", help="Executa uma recipe por id")
+    parser.add_argument("--recipe-inputs", default="", help="JSON object com inputs para --run-recipe")
     
     args = parser.parse_args()
     
@@ -333,6 +352,14 @@ if __name__ == "__main__":
     elif args.run_capability:
         try:
             run_capability_from_cli(args.run_capability, args.capability_args, args.profile)
+        except Exception as e:
+            print(f"{RED}{e}{RESET}")
+            sys.exit(2)
+    elif args.recipes:
+        print_recipes()
+    elif args.run_recipe:
+        try:
+            run_recipe_from_cli(args.run_recipe, args.recipe_inputs, args.profile)
         except Exception as e:
             print(f"{RED}{e}{RESET}")
             sys.exit(2)

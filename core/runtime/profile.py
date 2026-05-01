@@ -27,6 +27,7 @@ DEFAULT_PROFILE: Dict[str, Any] = {
             "state.write",
             "network.read",
             "network.write",
+            "recipe.run",
         ],
         "deny_permissions": [],
     },
