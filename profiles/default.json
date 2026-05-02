@@ -17,7 +17,9 @@
       "video.render",
       "hub.report",
       "profile.read",
+      "state.read",
       "state.write",
+      "system.read",
       "network.read",
       "network.write",
       "recipe.run"

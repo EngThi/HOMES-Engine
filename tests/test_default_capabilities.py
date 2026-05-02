@@ -10,11 +10,16 @@ def test_default_registry_lists_production_capabilities_without_experimental():
     registry = build_default_registry()
     ids = {item["id"] for item in registry.list()}
 
+    assert "agent.output_list" in ids
+    assert "agent.output_forget" in ids
+    assert "agent.profile_summary" in ids
     assert "agent.runtime_manifest" in ids
+    assert "agent.state_summary" in ids
     assert "integration.hosted_demo_url" in ids
     assert "integration.videolm_health" in ids
     assert "production.video_render" in ids
     assert "production.notebooklm_poll" in ids
+    assert "system.status" in ids
     assert "agent.module_run" not in ids
 
 
@@ -44,6 +49,66 @@ def test_runtime_manifest_capability_includes_recipes():
     assert result["name"] == "HOMES-Engine"
     assert result["capabilities_count"] >= 1
     assert any(item["id"] == "engine_smoke" for item in result["recipes"])
+
+
+def test_profile_summary_uses_runtime_profile():
+    profile = load_profile("default")
+    context = CapabilityContext(profile=profile)
+
+    result = run_capability("agent.profile_summary", context=context)
+
+    assert result["id"] == "default"
+    assert "policies" in result
+
+
+def test_state_summary_reads_state_store(tmp_path):
+    state = StateStore(str(tmp_path / "state.sqlite"))
+    state.set("outputs", "video1", {"url": "https://example.com/video.mp4"})
+    state.append_event("demo.event", {"ok": True})
+    context = CapabilityContext(profile=load_profile("default"), state=state)
+
+    result = run_capability("agent.state_summary", {"limit": 1}, context=context)
+
+    assert result["status"] == "available"
+    assert "outputs" in result["namespaces"]
+    assert result["recent_events"][0]["event_type"] == "capability.invoked"
+
+
+def test_output_remember_and_list(tmp_path):
+    state = StateStore(str(tmp_path / "state.sqlite"))
+    context = CapabilityContext(profile=load_profile("default"), state=state, engine_id="engine-test")
+
+    remembered = run_capability(
+        "agent.output_remember",
+        {"id": "video1", "url": "https://example.com/video.mp4", "type": "video"},
+        context=context,
+    )
+    listed = run_capability("agent.output_list", {"render_dir": str(tmp_path / "renders")}, context=context)
+
+    assert remembered["status"] == "completed"
+    assert listed["remembered_outputs"][0]["key"] == "video1"
+    assert listed["remembered_outputs"][0]["value"]["engine_id"] == "engine-test"
+
+
+def test_output_forget_removes_remembered_output(tmp_path):
+    state = StateStore(str(tmp_path / "state.sqlite"))
+    context = CapabilityContext(profile=load_profile("default"), state=state)
+    run_capability("agent.output_remember", {"id": "video1", "url": "https://example.com/video.mp4"}, context=context)
+
+    result = run_capability("agent.output_forget", {"id": "video1"}, context=context)
+
+    assert result == {"status": "completed", "id": "video1", "deleted": True}
+    assert state.list_namespace("outputs") == []
+
+
+def test_system_status_returns_machine_info(tmp_path):
+    context = CapabilityContext(profile=load_profile("default"), state=StateStore(str(tmp_path / "state.sqlite")))
+
+    result = run_capability("system.status", {"render_dir": str(tmp_path / "renders")}, context=context)
+
+    assert result["engine_id"] == "homes-engine"
+    assert result["disk"]["total_gb"] > 0
+    assert result["renders"]["count"] == 0
 
 
 def test_run_capability_blocks_missing_permission():

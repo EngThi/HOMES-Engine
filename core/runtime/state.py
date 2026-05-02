@@ -63,6 +63,40 @@ class StateStore:
             ).fetchone()
         return json.loads(row[0]) if row else default
 
+    def delete(self, namespace: str, key: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM kv WHERE namespace = ? AND key = ?",
+                (namespace, key),
+            )
+            return cursor.rowcount > 0
+
+    def list_namespace(self, namespace: str, limit: int = 50) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT key, value, updated_at
+                FROM kv
+                WHERE namespace = ?
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (namespace, limit),
+            ).fetchall()
+        return [
+            {
+                "key": row[0],
+                "value": json.loads(row[1]),
+                "updated_at": row[2],
+            }
+            for row in rows
+        ]
+
+    def namespaces(self) -> List[str]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT DISTINCT namespace FROM kv ORDER BY namespace").fetchall()
+        return [row[0] for row in rows]
+
     def append_event(self, event_type: str, payload: Dict[str, Any]) -> int:
         raw = json.dumps(payload, separators=(",", ":"))
         with self._connect() as conn:

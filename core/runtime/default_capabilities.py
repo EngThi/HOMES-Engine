@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import platform
+import shutil
 import time
+from pathlib import Path
 from typing import Any, Dict
 
 from core.video_maker import generate_video
@@ -93,6 +96,198 @@ def build_default_registry() -> CapabilityRegistry:
             profile=context.profile,
             include_experimental=bool(args.get("include_experimental", True)),
         )
+
+    @registry.register(
+        CapabilitySpec(
+            id="agent.profile_summary",
+            name="Profile Summary",
+            description="Return profile preferences, configured sources, goals, devices, and policy permissions.",
+            category="agent",
+            outputs_schema={"type": "object"},
+            permissions_required=["profile.read"],
+            triggers_supported=["cli", "hub_command"],
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def profile_summary(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        profile = context.profile or {}
+        return {
+            "id": profile.get("id", "default"),
+            "preferences": profile.get("preferences", {}),
+            "goals": profile.get("goals", []),
+            "devices": profile.get("devices", []),
+            "policies": profile.get("policies", {}),
+        }
+
+    @registry.register(
+        CapabilitySpec(
+            id="agent.state_summary",
+            name="State Summary",
+            description="Return runtime state namespaces and recent event log entries.",
+            category="agent",
+            outputs_schema={"type": "object"},
+            permissions_required=["state.read"],
+            triggers_supported=["cli", "hub_command"],
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def state_summary(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        state = context.state
+        if not state:
+            return {"status": "unavailable", "namespaces": [], "recent_events": []}
+        limit = int(args.get("limit", 10))
+        return {
+            "status": "available",
+            "namespaces": state.namespaces(),
+            "recent_events": state.recent_events(limit=limit),
+        }
+
+    @registry.register(
+        CapabilitySpec(
+            id="agent.output_list",
+            name="Output List",
+            description="List local render artifacts and remembered public outputs.",
+            category="agent",
+            outputs_schema={"type": "object"},
+            permissions_required=["state.read"],
+            triggers_supported=["cli", "hub_command"],
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def output_list(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        limit = int(args.get("limit", 20))
+        render_dir = Path(args.get("render_dir") or "output/renders")
+        local_outputs = []
+        if render_dir.exists():
+            files = sorted(
+                (path for path in render_dir.iterdir() if path.is_file()),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+            for path in files[:limit]:
+                stat = path.stat()
+                local_outputs.append(
+                    {
+                        "name": path.name,
+                        "path": str(path),
+                        "size_bytes": stat.st_size,
+                        "updated_at": stat.st_mtime,
+                    }
+                )
+        remembered = context.state.list_namespace("outputs", limit=limit) if context.state else []
+        return {"local_outputs": local_outputs, "remembered_outputs": remembered}
+
+    @registry.register(
+        CapabilitySpec(
+            id="agent.output_remember",
+            name="Remember Output",
+            description="Persist a public or local artifact record in the runtime state store.",
+            category="agent",
+            inputs_schema={
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "url": {"type": "string"},
+                    "path": {"type": "string"},
+                    "type": {"type": "string"},
+                    "metadata": {"type": "object"},
+                },
+            },
+            outputs_schema={"type": "object"},
+            permissions_required=["state.write"],
+            triggers_supported=["cli", "hub_command", "recipe"],
+            writes_state=True,
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def output_remember(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        output_id = args.get("id")
+        if not output_id:
+            raise ValueError("id is required")
+        if not context.state:
+            raise RuntimeError("state store is unavailable")
+        record = {
+            "id": output_id,
+            "url": args.get("url", ""),
+            "path": args.get("path", ""),
+            "type": args.get("type", "artifact"),
+            "metadata": args.get("metadata") or {},
+            "engine_id": context.engine_id,
+            "created_at": time.time(),
+        }
+        context.state.set("outputs", output_id, record)
+        record_event(context, "output.remembered", record)
+        return {"status": "completed", "output": record}
+
+    @registry.register(
+        CapabilitySpec(
+            id="agent.output_forget",
+            name="Forget Output",
+            description="Remove an artifact record from the runtime state store.",
+            category="agent",
+            inputs_schema={
+                "type": "object",
+                "required": ["id"],
+                "properties": {"id": {"type": "string"}},
+            },
+            outputs_schema={"type": "object"},
+            permissions_required=["state.write"],
+            triggers_supported=["cli", "hub_command"],
+            writes_state=True,
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def output_forget(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        output_id = args.get("id")
+        if not output_id:
+            raise ValueError("id is required")
+        if not context.state:
+            raise RuntimeError("state store is unavailable")
+        deleted = context.state.delete("outputs", output_id)
+        record_event(context, "output.forgotten", {"id": output_id, "deleted": deleted})
+        return {"status": "completed", "id": output_id, "deleted": deleted}
+
+    @registry.register(
+        CapabilitySpec(
+            id="system.status",
+            name="System Status",
+            description="Return local platform, disk, memory, render directory, and Engine identity status.",
+            category="perception",
+            outputs_schema={"type": "object"},
+            permissions_required=["system.read"],
+            triggers_supported=["cli", "hub_command"],
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def system_status(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        usage = shutil.disk_usage(os.path.expanduser("~"))
+        render_dir = Path(args.get("render_dir") or "output/renders")
+        render_count = len([path for path in render_dir.iterdir() if path.is_file()]) if render_dir.exists() else 0
+        status = {
+            "engine_id": context.engine_id,
+            "platform": platform.system(),
+            "machine": platform.machine(),
+            "python": platform.python_version(),
+            "disk": {
+                "free_gb": round(usage.free / 1e9, 2),
+                "total_gb": round(usage.total / 1e9, 2),
+            },
+            "renders": {
+                "path": str(render_dir),
+                "count": render_count,
+            },
+        }
+        meminfo = _read_meminfo()
+        if meminfo:
+            status["memory"] = meminfo
+        return status
 
     @registry.register(
         CapabilitySpec(
@@ -334,3 +529,24 @@ def parse_capability_args(raw: str) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("--capability-args must be a JSON object")
     return data
+
+
+def _read_meminfo() -> Dict[str, Any]:
+    try:
+        with open("/proc/meminfo", "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except OSError:
+        return {}
+    values = {}
+    for line in lines:
+        key, raw_value = line.split(":", 1)
+        values[key] = int(raw_value.strip().split()[0])
+    total_mb = values.get("MemTotal", 0) // 1024
+    available_mb = values.get("MemAvailable", 0) // 1024
+    if not total_mb:
+        return {}
+    return {
+        "total_mb": total_mb,
+        "available_mb": available_mb,
+        "used_mb": total_mb - available_mb,
+    }

@@ -55,8 +55,14 @@ def test_state_store_persists_values_and_events(tmp_path):
     store = StateStore(str(tmp_path / "state.sqlite"))
 
     store.set("jobs", "job1", {"status": "completed"})
+    store.set("outputs", "video1", {"url": "https://example.com/video.mp4"})
     event_id = store.append_event("job.completed", {"id": "job1"})
 
     assert store.get("jobs", "job1") == {"status": "completed"}
+    assert store.list_namespace("outputs")[0]["key"] == "video1"
+    assert "jobs" in store.namespaces()
+    assert "outputs" in store.namespaces()
+    assert store.delete("outputs", "video1") is True
+    assert store.delete("outputs", "missing") is False
     assert event_id == 1
     assert store.recent_events()[0]["event_type"] == "job.completed"

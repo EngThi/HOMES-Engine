@@ -44,8 +44,8 @@ python3 main.py
 The hosted demo is backed by the VideoLM VM renderer and includes pre-rendered outputs plus deterministic demo generation. The CLI remains the canonical local interface.
 
 > [!TIP]
-> A completed Hack Club NotebookLM render is available as a public MP4:<br>
-> [Watch the Hack Club community render](https://54-162-84-165.sslip.io/videos/research_community_1777566704645.mp4)
+> A fresh public terminal-dashboard smoke render is available as an MP4:<br>
+> [Watch the verified smoke render](https://54-162-84-165.sslip.io/videos/terminal_dash_1777670483_1777670483410.mp4)
 
 ## Production Capabilities
 
@@ -57,7 +57,8 @@ The hosted demo is backed by the VideoLM VM renderer and includes pre-rendered o
 - **Branding kits:** reads brand profiles for style prompts, colors, logos, and music assets.
 - **Fallback rendering path:** uses local FFmpeg if the hosted renderer is unavailable.
 - **Local queue daemon:** processes `scripts/*.pending.txt` jobs for terminal/offline workflows.
-- **Runtime primitives:** capability registry, profile loader, policy gate, and SQLite state/event store are now scaffolded for broader automation modules.
+- **Runtime primitives:** capability registry, profile loader, policy gate, recipes, and SQLite state/event store for broader automation modules.
+- **Operational memory:** remembers artifacts, indexes local renders, exposes recent runtime events, and reports system status through capabilities.
 
 ## Technical Stack
 
@@ -69,6 +70,13 @@ The hosted demo is backed by the VideoLM VM renderer and includes pre-rendered o
 - **Hub auth:** compact JSON HMAC-SHA256 via `X-Homes-Signature`
 - **Artifacts:** public VideoLM `/videos/*.mp4` URLs plus local `output/renders/` copies
 - **Runtime state:** local SQLite key-value/event store for long-running capabilities
+
+## Integration Handoffs
+
+For the connected HOMES services, use these handoff docs:
+
+- [HOMES Hub / MCP handoff](docs/HUB_MCP_RUNTIME_HANDOFF.md): Hub commands, MCP tool mapping, telemetry fields, recipes, capabilities, HMAC contract, and dashboard expectations.
+- [VideoLM terminal page handoff](docs/VIDEOLM_ENGINE_TERMINAL_HANDOFF.md): `/engine-demo` terminal UI direction, public render contract, MP4 validation rules, NotebookLM flow, gallery/player acceptance tests, and verified smoke MP4.
 
 ## Runtime Architecture
 
@@ -112,6 +120,10 @@ Runtime CLI examples:
 ```bash
 python3 main.py --capabilities
 python3 main.py --run-capability integration.hosted_demo_url
+python3 main.py --run-capability system.status
+python3 main.py --run-capability agent.profile_summary
+python3 main.py --run-capability agent.output_list
+python3 main.py --run-capability agent.output_forget --capability-args '{"id":"old_output"}'
 python3 main.py --run-capability production.video_render \
   --capability-args '{"script":"A short HOMES-Engine demo.","brand":"demo"}'
 python3 main.py --run-capability production.notebooklm_poll \
@@ -136,6 +148,11 @@ python3 main.py --capabilities
 python3 main.py --capabilities --include-experimental
 python3 main.py --runtime-manifest
 python3 main.py --run-capability integration.hosted_demo_url
+python3 main.py --run-capability system.status
+python3 main.py --run-capability agent.state_summary
+python3 main.py --run-capability agent.output_list
+python3 main.py --run-capability agent.output_remember \
+  --capability-args '{"id":"demo","url":"https://example.com/demo.mp4","type":"video"}'
 python3 main.py --run-capability production.video_render \
   --capability-args '{"script_path":"scripts/e2e_engine_test.txt","brand":"demo"}'
 python3 main.py --recipes
