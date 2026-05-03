@@ -14,6 +14,7 @@
     "network": "allow",
     "allow_hardware": false,
     "allow_permissions": [
+      "artifact.create",
       "video.render",
       "hub.report",
       "profile.read",

@@ -19,7 +19,7 @@ import platform
 import shutil
 import subprocess
 import requests
-from typing import Optional
+from typing import Any, Optional
 from dotenv import load_dotenv
 
 # Carregar variáveis de ambiente do .env
@@ -55,33 +55,83 @@ def _post_signed(path: str, payload: dict, timeout: int = 10) -> requests.Respon
     return requests.post(f"{HUB_BASE}{path}", data=body, headers=headers, timeout=timeout)
 
 
-def _public_video_url(video_path: str) -> str:
-    """Best-effort public URL for Hub downloads."""
-    if not video_path:
-        return ""
-    if video_path.startswith(("http://", "https://")):
-        return video_path
-    if video_path.startswith("/videos/"):
-        base_url = os.getenv("VIDEOLM_URL", "").rstrip("/")
-        return f"{base_url}{video_path}" if base_url else ""
+_VIDEOLM_ARTIFACT_TYPES_CACHE: Any = None
 
-    sidecar_path = f"{video_path}.source.json"
+
+def _public_artifact_url(artifact_path: str) -> str:
+    """Best-effort public URL for Hub artifact downloads."""
+    if not artifact_path:
+        return ""
+    if artifact_path.startswith(("http://", "https://")):
+        return artifact_path
+    if artifact_path.startswith(("/videos/", "/artifacts/", "/images/", "/files/")):
+        base_url = os.getenv("VIDEOLM_URL", "").rstrip("/")
+        return f"{base_url}{artifact_path}" if base_url else ""
+
+    sidecar_path = f"{artifact_path}.source.json"
     if os.path.exists(sidecar_path):
         try:
             with open(sidecar_path, "r", encoding="utf-8") as f:
                 source = json.load(f)
-            source_url = source.get("video_url") or source.get("videoUrl")
+            source_url = (
+                source.get("artifact_url")
+                or source.get("artifactUrl")
+                or source.get("video_url")
+                or source.get("videoUrl")
+                or source.get("image_url")
+                or source.get("imageUrl")
+                or source.get("url")
+            )
             if source_url:
                 return source_url
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning(f"Não foi possível ler URL pública do vídeo {video_path}: {e}")
+            logger.warning(f"Não foi possível ler URL pública do artifact {artifact_path}: {e}")
 
     public_base = os.getenv("HOMES_ENGINE_PUBLIC_BASE_URL", "").rstrip("/")
-    public_prefix = os.getenv("HOMES_ENGINE_PUBLIC_VIDEO_PATH", "/videos").strip("/")
-    if public_base and os.path.exists(video_path):
-        return f"{public_base}/{public_prefix}/{os.path.basename(video_path)}"
+    public_prefix = os.getenv("HOMES_ENGINE_PUBLIC_ARTIFACT_PATH", "").strip("/")
+    if not public_prefix:
+        public_prefix = os.getenv("HOMES_ENGINE_PUBLIC_VIDEO_PATH", "/videos").strip("/")
+    if public_base and os.path.exists(artifact_path):
+        return f"{public_base}/{public_prefix}/{os.path.basename(artifact_path)}"
 
     return ""
+
+
+def _public_video_url(video_path: str) -> str:
+    """Backward-compatible wrapper for old video-only callers."""
+    return _public_artifact_url(video_path)
+
+
+def _guess_content_type(path_or_url: str) -> str:
+    value = (path_or_url or "").split("?", 1)[0].lower()
+    if value.endswith(".mp4"):
+        return "video/mp4"
+    if value.endswith(".webm"):
+        return "video/webm"
+    if value.endswith(".mov"):
+        return "video/quicktime"
+    if value.endswith(".png"):
+        return "image/png"
+    if value.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if value.endswith(".pdf"):
+        return "application/pdf"
+    if value.endswith(".json"):
+        return "application/json"
+    if value.endswith(".html"):
+        return "text/html"
+    if value.endswith(".mp3"):
+        return "audio/mpeg"
+    if value.endswith(".wav"):
+        return "audio/wav"
+    return ""
+
+
+def _is_video_artifact(path_or_url: str, content_type: str = "") -> bool:
+    content_type = (content_type or "").lower()
+    return content_type.startswith("video/") or (path_or_url or "").split("?", 1)[0].lower().endswith(
+        (".mp4", ".webm", ".mov")
+    )
 
 
 def _video_metadata(video_path: str) -> dict:
@@ -204,18 +254,46 @@ def report_job_status(job_id: str, status: str, progress: int = 0, stage: str = 
 
 def report_job_done(job_id: str, video_path: str) -> bool:
     """Notifica o Hub que o job foi concluído."""
+    return report_artifact_done(job_id, artifact_path=video_path, artifact_type="video")
+
+
+def report_artifact_done(
+    job_id: str,
+    artifact_path: str = "",
+    artifact_url: str = "",
+    artifact_type: str = "artifact",
+    content_type: str = "",
+    metadata: Optional[dict] = None,
+) -> bool:
+    """Notifica o Hub que um job de artifact generico foi concluído."""
+    public_url = artifact_url or _public_artifact_url(artifact_path)
+    resolved_content_type = content_type or _guess_content_type(public_url or artifact_path)
     payload = {
         "id": job_id,
-        "video_path": video_path,
         "status": "completed",
         "engine_id": ENGINE_ID,
         "timestamp": time.time(),
     }
-    video_url = _public_video_url(video_path)
-    if video_url:
-        payload["video_url"] = video_url
-        payload["videoUrl"] = video_url
-    payload.update(_video_metadata(video_path))
+    if artifact_path:
+        payload["artifact_path"] = artifact_path
+    if artifact_type:
+        payload["artifact_type"] = artifact_type
+        payload["artifactType"] = artifact_type
+    if public_url:
+        payload["artifact_url"] = public_url
+        payload["artifactUrl"] = public_url
+    if resolved_content_type:
+        payload["content_type"] = resolved_content_type
+        payload["contentType"] = resolved_content_type
+    if _is_video_artifact(public_url or artifact_path, resolved_content_type):
+        if artifact_path:
+            payload["video_path"] = artifact_path
+        if public_url:
+            payload["video_url"] = public_url
+            payload["videoUrl"] = public_url
+        payload.update(_video_metadata(artifact_path))
+    if metadata:
+        payload.update(metadata)
     try:
         r = _post_signed(f"/api/projects/{job_id}/complete", payload, timeout=10)
         if not r.ok:
@@ -257,9 +335,13 @@ def _get_local_telemetry() -> dict:
         "timestamp": time.strftime("%H:%M:%S"),
     }
     try:
+        from core.runtime import build_runtime_manifest, list_recipes, load_profile
         from core.runtime.default_capabilities import build_default_registry
 
-        capabilities = build_default_registry().list(include_experimental=True)
+        registry = build_default_registry()
+        profile = load_profile("default")
+        runtime_manifest = build_runtime_manifest(registry, profile, include_experimental=False)
+        capabilities = runtime_manifest["capabilities"]
         telemetry["capabilities_count"] = len(capabilities)
         telemetry["capabilities"] = [
             {
@@ -269,11 +351,14 @@ def _get_local_telemetry() -> dict:
             }
             for capability in capabilities
         ]
-        from core.runtime import list_recipes
-
+        telemetry["runtime_manifest"] = runtime_manifest
         telemetry["recipes"] = list_recipes()
     except Exception as e:
         logger.warning(f"Falha ao anexar capabilities na telemetria: {e}")
+    artifact_types = _videolm_artifact_types_for_telemetry()
+    if artifact_types:
+        telemetry["artifactTypes"] = artifact_types
+        telemetry["artifact_types"] = artifact_types
     try:
         from core.runtime import StateStore
 
@@ -314,6 +399,31 @@ def _get_local_telemetry() -> dict:
         pass
     telemetry["engine_active"] = True
     return telemetry
+
+
+def _videolm_artifact_types_for_telemetry() -> Any:
+    """Attach VideoLM artifactTypes when the VM has a VideoLM URL configured."""
+    global _VIDEOLM_ARTIFACT_TYPES_CACHE
+    if _VIDEOLM_ARTIFACT_TYPES_CACHE is not None:
+        return _VIDEOLM_ARTIFACT_TYPES_CACHE
+    if os.getenv("HOMES_ENGINE_FETCH_VIDEOLM_MANIFEST", "1") == "0":
+        _VIDEOLM_ARTIFACT_TYPES_CACHE = {}
+        return _VIDEOLM_ARTIFACT_TYPES_CACHE
+    if not os.getenv("VIDEOLM_URL"):
+        _VIDEOLM_ARTIFACT_TYPES_CACHE = {}
+        return _VIDEOLM_ARTIFACT_TYPES_CACHE
+
+    try:
+        from core.videolm_client import fetch_engine_manifest
+
+        manifest = fetch_engine_manifest(timeout=2)
+        artifact_types = manifest.get("artifactTypes") or manifest.get("artifact_types") or {}
+        _VIDEOLM_ARTIFACT_TYPES_CACHE = artifact_types
+        return artifact_types
+    except Exception as e:
+        logger.warning(f"Falha ao anexar artifactTypes do VideoLM na telemetria: {e}")
+        _VIDEOLM_ARTIFACT_TYPES_CACHE = {}
+        return _VIDEOLM_ARTIFACT_TYPES_CACHE
 
 
 def push_telemetry() -> bool:

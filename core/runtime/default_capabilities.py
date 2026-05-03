@@ -14,9 +14,13 @@ from core.videolm_client import (
     engine_demo_url,
     fetch_engine_health,
     fetch_engine_manifest,
+    poll_factory_infographic_assets,
     poll_notebooklm_video,
+    poll_studio_artifact,
     resolve_video_url,
+    submit_factory_infographic_assets,
     submit_notebooklm_video,
+    submit_studio_artifact,
 )
 
 from .capabilities import CapabilityContext, CapabilityRegistry, CapabilitySpec
@@ -381,6 +385,7 @@ def build_default_registry() -> CapabilityRegistry:
             urls=args.get("urls") or [],
             asset_paths=args.get("asset_paths") or [],
             style=args.get("style", "paper_craft"),
+            format=args.get("format", "brief"),
             style_prompt=args.get("style_prompt", ""),
             live_research=bool(args.get("live_research", False)),
             notebook_id=args.get("notebook_id", ""),
@@ -415,6 +420,177 @@ def build_default_registry() -> CapabilityRegistry:
         if video_url:
             result["resolvedVideoUrl"] = video_url
         return result
+
+    @registry.register(
+        CapabilitySpec(
+            id="production.studio_artifact_submit",
+            name="Studio Artifact Submit",
+            description="Submit a generic VideoLM/NotebookLM Studio artifact job discovered from the Engine manifest.",
+            category="production",
+            inputs_schema={
+                "type": "object",
+                "required": ["project_id", "artifact_type"],
+                "properties": {
+                    "project_id": {"type": "string"},
+                    "artifact_type": {"type": "string"},
+                    "title": {"type": "string"},
+                    "theme": {"type": "string"},
+                    "urls": {"type": "array", "items": {"type": "string"}},
+                    "asset_paths": {"type": "array", "items": {"type": "string"}},
+                    "style": {"type": "string"},
+                    "format": {"type": "string"},
+                    "aspect": {"type": "string"},
+                    "orientation": {"type": "string"},
+                    "focus_prompt": {"type": "string"},
+                    "focusPrompt": {"type": "string"},
+                    "infographic_orientation": {"type": "string"},
+                    "infographicOrientation": {"type": "string"},
+                    "infographic_detail": {"type": "string"},
+                    "infographicDetail": {"type": "string"},
+                    "style_prompt": {"type": "string"},
+                    "live_research": {"type": "boolean"},
+                    "notebook_id": {"type": "string"},
+                    "profile_id": {"type": "string"},
+                },
+            },
+            outputs_schema={"type": "object"},
+            permissions_required=["artifact.create", "network.write", "state.write"],
+            triggers_supported=["cli", "hub_job", "hub_command"],
+            async_mode=True,
+            writes_state=True,
+            network_access=True,
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def studio_artifact_submit(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        project_id = args.get("project_id") or args.get("projectId")
+        artifact_type = args.get("artifact_type") or args.get("artifactType") or args.get("type") or "video"
+        if not project_id:
+            raise ValueError("project_id is required")
+        result = submit_studio_artifact(
+            project_id=project_id,
+            artifact_type=artifact_type,
+            title=args.get("title", ""),
+            theme=args.get("theme", ""),
+            urls=args.get("urls") or [],
+            asset_paths=args.get("asset_paths") or args.get("assets") or [],
+            style=args.get("style", "paper_craft"),
+            format=args.get("format", "brief"),
+            aspect=args.get("aspect", ""),
+            focus_prompt=args.get("focus_prompt") or args.get("focusPrompt", ""),
+            infographic_orientation=args.get("infographic_orientation") or args.get("infographicOrientation") or args.get("orientation", ""),
+            infographic_detail=args.get("infographic_detail") or args.get("infographicDetail", ""),
+            style_prompt=args.get("style_prompt") or args.get("stylePrompt", ""),
+            live_research=bool(args.get("live_research", args.get("liveResearch", False))),
+            notebook_id=args.get("notebook_id") or args.get("notebookId", ""),
+            profile_id=args.get("profile_id") or args.get("profileId", "default"),
+        )
+        record_event(context, "artifact.submitted", {"project_id": project_id, "artifact_type": artifact_type, "result": result})
+        return result
+
+    @registry.register(
+        CapabilitySpec(
+            id="production.studio_artifact_poll",
+            name="Studio Artifact Poll",
+            description="Poll a generic VideoLM/NotebookLM Studio artifact and normalize its final URL.",
+            category="production",
+            inputs_schema={
+                "type": "object",
+                "required": ["project_id"],
+                "properties": {
+                    "project_id": {"type": "string"},
+                    "artifact_type": {"type": "string"},
+                },
+            },
+            outputs_schema={"type": "object"},
+            permissions_required=["network.read"],
+            triggers_supported=["cli", "hub_command"],
+            network_access=True,
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def studio_artifact_poll(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        project_id = args.get("project_id") or args.get("projectId")
+        if not project_id:
+            raise ValueError("project_id is required")
+        return poll_studio_artifact(
+            project_id,
+            artifact_type=args.get("artifact_type") or args.get("artifactType", ""),
+        )
+
+    @registry.register(
+        CapabilitySpec(
+            id="production.factory_infographic_assets_submit",
+            name="Factory Infographic Assets Submit",
+            description="Start VideoLM Factory infographic asset generation for storyboard scenes.",
+            category="production",
+            inputs_schema={
+                "type": "object",
+                "required": ["project_id"],
+                "properties": {
+                    "project_id": {"type": "string"},
+                    "theme": {"type": "string"},
+                    "urls": {"type": "array", "items": {"type": "string"}},
+                    "style": {"type": "string"},
+                    "aspect": {"type": "string"},
+                    "orientation": {"type": "string"},
+                    "notebook_id": {"type": "string"},
+                    "profile_id": {"type": "string"},
+                },
+            },
+            outputs_schema={"type": "object"},
+            permissions_required=["artifact.create", "network.write", "state.write"],
+            triggers_supported=["cli", "hub_job", "hub_command"],
+            async_mode=True,
+            writes_state=True,
+            network_access=True,
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def factory_infographic_assets_submit(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        project_id = args.get("project_id") or args.get("projectId")
+        if not project_id:
+            raise ValueError("project_id is required")
+        result = submit_factory_infographic_assets(
+            project_id=project_id,
+            theme=args.get("theme", ""),
+            urls=args.get("urls") or [],
+            style=args.get("style", "paper_craft"),
+            aspect=args.get("aspect", "portrait"),
+            orientation=args.get("orientation", ""),
+            notebook_id=args.get("notebook_id") or args.get("notebookId", ""),
+            profile_id=args.get("profile_id") or args.get("profileId", "default"),
+        )
+        record_event(context, "artifact.factory_infographic_assets.submitted", {"project_id": project_id, "result": result})
+        return result
+
+    @registry.register(
+        CapabilitySpec(
+            id="production.factory_infographic_assets_poll",
+            name="Factory Infographic Assets Poll",
+            description="Poll a VideoLM Factory infographic asset generation job.",
+            category="production",
+            inputs_schema={
+                "type": "object",
+                "required": ["job_id"],
+                "properties": {"job_id": {"type": "string"}},
+            },
+            outputs_schema={"type": "object"},
+            permissions_required=["network.read"],
+            triggers_supported=["cli", "hub_command"],
+            network_access=True,
+            edge_compatible=True,
+            hub_compatible=True,
+        )
+    )
+    def factory_infographic_assets_poll(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
+        job_id = args.get("job_id") or args.get("jobId")
+        if not job_id:
+            raise ValueError("job_id is required")
+        return poll_factory_infographic_assets(job_id)
 
     @registry.register(
         CapabilitySpec(

@@ -98,6 +98,7 @@ def submit_notebooklm_video(
     urls: Optional[list] = None,
     asset_paths: Optional[list] = None,
     style: str = "classic",
+    format: str = "brief",
     style_prompt: str = "",
     live_research: bool = False,
     notebook_id: str = "",
@@ -108,6 +109,7 @@ def submit_notebooklm_video(
     endpoint = f"{_base_url()}/api/engine/notebooklm/video"
     data = [
         ("style", style),
+        ("format", format or "brief"),
         ("liveResearch", str(live_research).lower()),
         ("profileId", profile_id or "default"),
     ]
@@ -164,10 +166,359 @@ def poll_notebooklm_video(project_id: str, timeout: int = 30) -> dict:
     return resp.json()
 
 
+def submit_studio_artifact(
+    project_id: str,
+    artifact_type: str = "video",
+    title: str = "",
+    theme: str = "",
+    urls: Optional[list] = None,
+    asset_paths: Optional[list] = None,
+    style: str = "paper_craft",
+    format: str = "brief",
+    aspect: str = "",
+    focus_prompt: str = "",
+    infographic_orientation: str = "",
+    infographic_detail: str = "",
+    style_prompt: str = "",
+    live_research: bool = False,
+    notebook_id: str = "",
+    profile_id: str = "default",
+    timeout: int = 120,
+) -> dict:
+    """Submit a generic NotebookLM Studio artifact job through the VideoLM contract."""
+    if not project_id:
+        raise ValueError("project_id is required")
+    artifact_type = normalize_artifact_type(artifact_type or "video")
+    endpoint = f"{_base_url()}/api/engine/notebooklm/artifact"
+    body = {
+        "projectId": project_id,
+        "type": artifact_type,
+        "artifactType": artifact_type,
+        "title": title,
+        "theme": theme,
+        "urls": urls or [],
+        "style": style,
+        "format": format or "brief",
+        "aspect": aspect,
+        "orientation": infographic_orientation or aspect,
+        "focusPrompt": focus_prompt,
+        "infographicOrientation": infographic_orientation or aspect,
+        "infographicDetail": infographic_detail,
+        "stylePrompt": style_prompt,
+        "liveResearch": live_research,
+        "notebookId": notebook_id,
+        "profileId": profile_id or "default",
+    }
+    body = {key: value for key, value in body.items() if value not in ("", None, [], {})}
+    files, handles = _open_asset_files(asset_paths or [], field_name="assets")
+    try:
+        resp = requests.post(
+            endpoint,
+            data=body,
+            files=files or None,
+            headers=_headers(),
+            timeout=timeout,
+        )
+        if resp.status_code in (404, 405):
+            return _submit_studio_artifact_legacy(
+                project_id=project_id,
+                artifact_type=artifact_type,
+                title=title,
+                theme=theme,
+                urls=urls or [],
+                asset_paths=asset_paths or [],
+                style=style,
+                format=format,
+                aspect=aspect,
+                focus_prompt=focus_prompt,
+                infographic_orientation=infographic_orientation,
+                infographic_detail=infographic_detail,
+                style_prompt=style_prompt,
+                live_research=live_research,
+                notebook_id=notebook_id,
+                profile_id=profile_id,
+                timeout=timeout,
+            )
+        resp.raise_for_status()
+        return normalize_artifact_result(resp.json(), project_id=project_id, artifact_type=artifact_type)
+    finally:
+        for fh in handles:
+            fh.close()
+
+
+def poll_studio_artifact(project_id: str, artifact_type: str = "", timeout: int = 30) -> dict:
+    if not project_id:
+        raise ValueError("project_id is required")
+    result = poll_notebooklm_video(project_id, timeout=timeout)
+    return normalize_artifact_result(result, project_id=project_id, artifact_type=artifact_type or result.get("artifactType") or result.get("type", "artifact"))
+
+
+def submit_factory_infographic_assets(
+    project_id: str,
+    theme: str = "",
+    urls: Optional[list] = None,
+    style: str = "paper_craft",
+    aspect: str = "portrait",
+    orientation: str = "",
+    notebook_id: str = "",
+    profile_id: str = "default",
+    timeout: int = 120,
+) -> dict:
+    if not project_id:
+        raise ValueError("project_id is required")
+    body = {
+        "theme": theme,
+        "urls": urls or [],
+        "style": style,
+        "aspect": aspect,
+        "orientation": orientation or aspect,
+        "notebookId": notebook_id,
+        "profileId": profile_id or "default",
+    }
+    body = {key: value for key, value in body.items() if value not in ("", None, [], {})}
+    resp = requests.post(
+        f"{_base_url()}/api/research/{project_id}/factory-infographic-assets",
+        json=body,
+        headers=_headers(),
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    return normalize_artifact_result(resp.json(), project_id=project_id, artifact_type="factory-infographic-assets")
+
+
+def poll_factory_infographic_assets(job_id: str, timeout: int = 30) -> dict:
+    if not job_id:
+        raise ValueError("job_id is required")
+    resp = requests.get(
+        f"{_base_url()}/api/research/factory-infographic-assets/{job_id}",
+        headers=_headers(),
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    return normalize_artifact_result(resp.json(), artifact_type="factory-infographic-assets")
+
+
+def normalize_artifact_result(result: dict, project_id: str = "", artifact_type: str = "artifact") -> dict:
+    normalized = dict(result or {})
+    normalized.setdefault("project_id", project_id or normalized.get("projectId", ""))
+    normalized.setdefault("artifact_type", normalize_artifact_type(artifact_type or normalized.get("artifactType") or normalized.get("type", "artifact")))
+    artifact_url = _extract_artifact_url(normalized)
+    if artifact_url:
+        normalized["artifact_url"] = resolve_artifact_url(artifact_url)
+        if normalized["artifact_type"] == "video":
+            normalized["video_url"] = normalized["artifact_url"]
+            normalized["videoUrl"] = normalized["artifact_url"]
+    content_type = _guess_content_type(normalized["artifact_url"]) if artifact_url else ""
+    if content_type:
+        normalized.setdefault("content_type", content_type)
+    return normalized
+
+
+def resolve_artifact_url(path: str) -> str:
+    if not path:
+        return ""
+    return path if path.startswith(("http://", "https://")) else f"{_base_url()}{path}"
+
+
 def resolve_video_url(video_path: str) -> str:
     if not video_path:
         return ""
-    return video_path if video_path.startswith("http") else f"{_base_url()}{video_path}"
+    return resolve_artifact_url(video_path)
+
+
+def normalize_artifact_type(artifact_type: str) -> str:
+    value = (artifact_type or "artifact").strip().lower().replace("_", "-")
+    aliases = {
+        "table": "data-table",
+        "datatable": "data-table",
+        "data-table": "data-table",
+        "data-table-pdf": "data-table",
+        "mind-map": "mindmap",
+        "mind_map": "mindmap",
+        "slide": "slides",
+        "slide-deck": "slides",
+        "deck": "slides",
+        "audio-overview": "audio",
+        "video-overview": "video",
+        "image": "infographic",
+        "png": "infographic",
+    }
+    return aliases.get(value, value)
+
+
+def _submit_studio_artifact_legacy(
+    project_id: str,
+    artifact_type: str,
+    title: str = "",
+    theme: str = "",
+    urls: Optional[list] = None,
+    asset_paths: Optional[list] = None,
+    style: str = "paper_craft",
+    format: str = "brief",
+    aspect: str = "",
+    focus_prompt: str = "",
+    infographic_orientation: str = "",
+    infographic_detail: str = "",
+    style_prompt: str = "",
+    live_research: bool = False,
+    notebook_id: str = "",
+    profile_id: str = "default",
+    timeout: int = 120,
+) -> dict:
+    if artifact_type == "video":
+        result = submit_notebooklm_video(
+            project_id=project_id,
+            title=title,
+            theme=theme,
+            urls=urls or [],
+            asset_paths=asset_paths or [],
+            style=style,
+            format=format,
+            style_prompt=style_prompt,
+            live_research=live_research,
+            notebook_id=notebook_id,
+            profile_id=profile_id,
+            timeout=timeout,
+        )
+        return normalize_artifact_result(result, project_id=project_id, artifact_type=artifact_type)
+
+    _add_research_sources(project_id, urls or [], timeout=timeout)
+    _add_research_files(project_id, asset_paths or [], notebook_id=notebook_id, profile_id=profile_id, timeout=timeout)
+    body = {
+        "type": artifact_type,
+        "artifactType": artifact_type,
+        "style": style,
+        "format": format or "brief",
+        "aspect": aspect,
+        "orientation": infographic_orientation or aspect,
+        "focusPrompt": focus_prompt,
+        "infographicOrientation": infographic_orientation or aspect,
+        "infographicDetail": infographic_detail,
+        "stylePrompt": style_prompt,
+        "liveResearch": live_research,
+        "notebookId": notebook_id,
+        "profileId": profile_id or "default",
+        "theme": theme,
+        "title": title,
+    }
+    body = {key: value for key, value in body.items() if value not in ("", None, [], {})}
+    resp = requests.post(
+        f"{_base_url()}/api/research/{project_id}/trigger",
+        json=body,
+        headers=_headers(),
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    return normalize_artifact_result(resp.json(), project_id=project_id, artifact_type=artifact_type)
+
+
+def _open_asset_files(asset_paths: list, field_name: str = "files") -> tuple[list, list]:
+    files = []
+    handles = []
+    for path in asset_paths or []:
+        if not path:
+            continue
+        if not os.path.exists(path):
+            for fh in handles:
+                fh.close()
+            raise FileNotFoundError(f"Studio artifact asset not found: {path}")
+        fh = open(path, "rb")
+        handles.append(fh)
+        files.append((field_name, (Path(path).name, fh, "application/octet-stream")))
+    return files, handles
+
+
+def _add_research_sources(project_id: str, urls: list, timeout: int = 120) -> None:
+    clean_urls = [url for url in urls or [] if url]
+    if not clean_urls:
+        return
+    resp = requests.post(
+        f"{_base_url()}/api/research/{project_id}/sources",
+        json={"urls": clean_urls},
+        headers=_headers(),
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+
+
+def _add_research_files(
+    project_id: str,
+    asset_paths: list,
+    notebook_id: str = "",
+    profile_id: str = "default",
+    timeout: int = 120,
+) -> None:
+    if not asset_paths:
+        return
+    files = []
+    handles = []
+    try:
+        files, handles = _open_asset_files(asset_paths, field_name="files")
+        if not files:
+            return
+        data = {"profileId": profile_id or "default"}
+        if notebook_id:
+            data["notebookId"] = notebook_id
+        resp = requests.post(
+            f"{_base_url()}/api/research/{project_id}/source-files",
+            data=data,
+            files=files,
+            headers=_headers(),
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+    finally:
+        for fh in handles:
+            fh.close()
+
+
+def _extract_artifact_url(result: dict) -> str:
+    for key in (
+        "artifact_url",
+        "artifactUrl",
+        "video_url",
+        "videoUrl",
+        "videoPath",
+        "audioUrl",
+        "imageUrl",
+        "pdfUrl",
+        "jsonUrl",
+        "htmlUrl",
+        "downloadUrl",
+        "url",
+    ):
+        value = result.get(key)
+        if isinstance(value, str) and value:
+            return value
+    artifacts = result.get("artifacts")
+    if isinstance(artifacts, list):
+        for artifact in artifacts:
+            if isinstance(artifact, dict):
+                value = _extract_artifact_url(artifact)
+                if value:
+                    return value
+    return ""
+
+
+def _guess_content_type(url: str) -> str:
+    lower = url.lower().split("?", 1)[0]
+    if lower.endswith(".mp4"):
+        return "video/mp4"
+    if lower.endswith(".mp3"):
+        return "audio/mpeg"
+    if lower.endswith(".wav"):
+        return "audio/wav"
+    if lower.endswith(".png"):
+        return "image/png"
+    if lower.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if lower.endswith(".pdf"):
+        return "application/pdf"
+    if lower.endswith(".json"):
+        return "application/json"
+    if lower.endswith(".html"):
+        return "text/html"
+    return ""
 
 
 def assemble_via_videolm(

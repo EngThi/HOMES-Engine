@@ -119,6 +119,7 @@ def test_submit_notebooklm_video_posts_multipart(tmp_path, monkeypatch):
     assert ("title", "Notebook Demo") in post.call_args.kwargs["data"]
     assert ("urls", "https://hackclub.com/") in post.call_args.kwargs["data"]
     assert ("style", "custom") in post.call_args.kwargs["data"]
+    assert ("format", "brief") in post.call_args.kwargs["data"]
     assert ("stylePrompt", "paper collage") in post.call_args.kwargs["data"]
     assert ("liveResearch", "true") in post.call_args.kwargs["data"]
     assert ("notebookId", "notebook-1") in post.call_args.kwargs["data"]
@@ -145,6 +146,107 @@ def test_resolve_video_url(monkeypatch):
         == "https://54-162-84-165.sslip.io/videos/research_nb1.mp4"
     )
     assert videolm_client.resolve_video_url("https://example.com/v.mp4") == "https://example.com/v.mp4"
+
+
+def test_submit_studio_artifact_video_uses_notebooklm_bridge(monkeypatch):
+    monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
+    post = Mock(return_value=FakeResponse(payload={"projectId": "studio1", "status": "submitted", "videoUrl": "/videos/studio1.mp4"}))
+    monkeypatch.setattr(videolm_client.requests, "post", post)
+
+    result = videolm_client.submit_studio_artifact(
+        project_id="studio1",
+        artifact_type="video",
+        urls=["https://hackclub.com/"],
+        style="paper_craft",
+        format="brief",
+    )
+
+    assert result["artifact_url"] == "https://54-162-84-165.sslip.io/videos/studio1.mp4"
+    assert result["video_url"] == "https://54-162-84-165.sslip.io/videos/studio1.mp4"
+    assert post.call_args.args[0] == "https://54-162-84-165.sslip.io/api/engine/notebooklm/artifact"
+    assert post.call_args.kwargs["data"]["artifactType"] == "video"
+
+
+def test_submit_studio_artifact_non_video_uses_generic_endpoint(monkeypatch):
+    monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
+    post = Mock(return_value=FakeResponse(payload={"status": "submitted", "artifactUrl": "/artifacts/info.png"}))
+    monkeypatch.setattr(videolm_client.requests, "post", post)
+
+    result = videolm_client.submit_studio_artifact(
+        project_id="studio2",
+        artifact_type="infographic",
+        urls=["https://hackclub.com/"],
+        theme="Hack Club",
+        aspect="portrait",
+        focus_prompt="clubs and projects",
+        infographic_orientation="portrait",
+        infographic_detail="high",
+    )
+
+    assert result["artifact_type"] == "infographic"
+    assert result["artifact_url"] == "https://54-162-84-165.sslip.io/artifacts/info.png"
+    assert result["content_type"] == "image/png"
+    assert post.call_args.args[0] == "https://54-162-84-165.sslip.io/api/engine/notebooklm/artifact"
+    assert post.call_args.kwargs["data"]["artifactType"] == "infographic"
+    assert post.call_args.kwargs["data"]["focusPrompt"] == "clubs and projects"
+    assert post.call_args.kwargs["data"]["infographicOrientation"] == "portrait"
+    assert post.call_args.kwargs["data"]["infographicDetail"] == "high"
+
+
+def test_submit_studio_artifact_falls_back_to_legacy_research_flow(monkeypatch):
+    monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
+    post = Mock(
+        side_effect=[
+            FakeResponse(ok=False, status_code=404, payload={"error": "not found"}),
+            FakeResponse(payload={"status": "sources_added"}),
+            FakeResponse(payload={"status": "submitted", "artifactUrl": "/artifacts/info.png"}),
+        ]
+    )
+    monkeypatch.setattr(videolm_client.requests, "post", post)
+
+    result = videolm_client.submit_studio_artifact(
+        project_id="studio2",
+        artifact_type="infographic",
+        urls=["https://hackclub.com/"],
+    )
+
+    assert result["artifact_url"] == "https://54-162-84-165.sslip.io/artifacts/info.png"
+    assert post.call_args_list[0].args[0] == "https://54-162-84-165.sslip.io/api/engine/notebooklm/artifact"
+    assert post.call_args_list[1].args[0] == "https://54-162-84-165.sslip.io/api/research/studio2/sources"
+    assert post.call_args_list[2].args[0] == "https://54-162-84-165.sslip.io/api/research/studio2/trigger"
+    assert post.call_args_list[2].kwargs["json"]["artifactType"] == "infographic"
+
+
+def test_normalize_artifact_type_aliases():
+    assert videolm_client.normalize_artifact_type("data_table") == "data-table"
+    assert videolm_client.normalize_artifact_type("mind-map") == "mindmap"
+    assert videolm_client.normalize_artifact_type("video-overview") == "video"
+
+
+def test_poll_studio_artifact_normalizes_url(monkeypatch):
+    monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
+    get = Mock(return_value=FakeResponse(payload={"status": "completed", "imageUrl": "/images/info.png"}))
+    monkeypatch.setattr(videolm_client.requests, "get", get)
+
+    result = videolm_client.poll_studio_artifact("studio3", artifact_type="infographic")
+
+    assert result["artifact_url"] == "https://54-162-84-165.sslip.io/images/info.png"
+    assert result["content_type"] == "image/png"
+
+
+def test_factory_infographic_assets_submit_and_poll(monkeypatch):
+    monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
+    post = Mock(return_value=FakeResponse(payload={"status": "submitted", "jobId": "job1"}))
+    get = Mock(return_value=FakeResponse(payload={"status": "completed", "imageUrl": "/images/job1.png"}))
+    monkeypatch.setattr(videolm_client.requests, "post", post)
+    monkeypatch.setattr(videolm_client.requests, "get", get)
+
+    submitted = videolm_client.submit_factory_infographic_assets("proj1", theme="Hack Club", urls=["https://hackclub.com/"])
+    polled = videolm_client.poll_factory_infographic_assets("job1")
+
+    assert submitted["artifact_type"] == "factory-infographic-assets"
+    assert post.call_args.args[0] == "https://54-162-84-165.sslip.io/api/research/proj1/factory-infographic-assets"
+    assert polled["artifact_url"] == "https://54-162-84-165.sslip.io/images/job1.png"
 
 
 def test_assemble_posts_assets_polls_and_downloads_video(tmp_path, monkeypatch):

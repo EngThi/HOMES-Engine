@@ -52,8 +52,10 @@ The hosted demo is backed by the VideoLM VM renderer and includes pre-rendered o
 - **Terminal CLI:** interactive `python3 main.py` plus non-interactive flags for health, manifest, demo URL, direct render, Hub mode, local queue mode, and NotebookLM submit/poll.
 - **Hosted VideoLM assembly:** sends audio, images, script, `projectId`, and optional background music to VideoLM; polls status; downloads the completed MP4.
 - **NotebookLM video bridge:** submits URLs/assets/notebook IDs to the hosted NotebookLM video endpoint with selectable styles.
+- **Generic Studio artifacts:** prepares `audio`, `video`, `infographic`, `report`, `quiz`, `flashcards`, `mindmap`, `slides`, and `data-table` style artifact flows behind manifest-driven capabilities.
+- **Factory infographic assets:** exposes submit/poll capabilities for VideoLM Factory storyboard images once the manifest publishes the final contract.
 - **HOMES Hub worker:** polls pending jobs, reports progress, signs status/complete/telemetry with HMAC, and returns public video artifacts.
-- **Public artifact reporting:** reports `video_path`, `video_url`, `videoUrl`, file size, duration, width, height, fps, codec, and `engine_id` on completed jobs.
+- **Public artifact reporting:** reports generic `artifact_url`/`artifactUrl` plus `content_type`/`contentType`; video jobs also keep `video_url`/`videoUrl`, `video_path`, file size, duration, width, height, fps, codec, and `engine_id`.
 - **Branding kits:** reads brand profiles for style prompts, colors, logos, and music assets.
 - **Fallback rendering path:** uses local FFmpeg if the hosted renderer is unavailable.
 - **Local queue daemon:** processes `scripts/*.pending.txt` jobs for terminal/offline workflows.
@@ -128,6 +130,10 @@ python3 main.py --run-capability production.video_render \
   --capability-args '{"script":"A short HOMES-Engine demo.","brand":"demo"}'
 python3 main.py --run-capability production.notebooklm_poll \
   --capability-args '{"project_id":"engine_hackclub_demo"}'
+python3 main.py --run-capability production.studio_artifact_submit \
+  --capability-args '{"project_id":"studio_demo","artifact_type":"infographic","urls":["https://hackclub.com/"],"style":"paper_craft","format":"brief","aspect":"portrait"}'
+python3 main.py --run-capability production.studio_artifact_poll \
+  --capability-args '{"project_id":"studio_demo","artifact_type":"infographic"}'
 python3 main.py --capabilities --include-experimental
 python3 main.py --runtime-manifest
 python3 main.py --recipes
@@ -229,6 +235,10 @@ Completion payload includes public playback metadata:
 ```json
 {
   "status": "completed",
+  "artifact_url": "https://54-162-84-165.sslip.io/videos/file.mp4",
+  "artifactUrl": "https://54-162-84-165.sslip.io/videos/file.mp4",
+  "content_type": "video/mp4",
+  "contentType": "video/mp4",
   "video_path": "/local/path/output.mp4",
   "video_url": "https://54-162-84-165.sslip.io/videos/file.mp4",
   "videoUrl": "https://54-162-84-165.sslip.io/videos/file.mp4",
@@ -279,8 +289,8 @@ The repository also includes exploratory modules that are not the reviewer-criti
 
 These are kept as internal experiments. The shipped product surface is the terminal video worker, Hub integration, VideoLM render path, and NotebookLM bridge.
 
-The worker telemetry also publishes a compact capability and recipe catalog (`capabilities_count`, `capabilities`, and `recipes`) so the HOMES Hub/MCP side can expose `get_engine_capabilities` and `list_engine_recipes` without hardcoding this repository.
-Telemetry also includes `recent_runtime_events` and `recent_command_results` so the Hub can show whether a remote capability command ran, failed, or produced an output.
+The worker telemetry publishes the compact catalog (`capabilities_count`, `capabilities`, and `recipes`) and the full `runtime_manifest` so the HOMES Hub/MCP side can expose `get_engine_capabilities`, `list_engine_recipes`, and terminal dashboard state without hardcoding this repository. The current runtime catalog has 19 capabilities, including generic Studio/Factory artifact creation and polling.
+Telemetry also includes `recent_runtime_events`, `recent_command_results`, local storage/RAM/render metrics, and VideoLM `artifactTypes` when the live `/api/engine/manifest` exposes them.
 
 The local runtime manifest includes the capability catalog, recipe catalog, Hub contract, engine id, platform, and profile policy:
 

@@ -93,11 +93,15 @@ Os POSTs precisam HMAC.
 
 ## Completion Payload Esperado
 
-Todo job de video concluido deve mandar o maximo de metadata possivel:
+Todo job concluido deve mandar URL publica generica de artifact e content type. Para video, manter tambem os campos antigos `video_url` e `videoUrl` para compatibilidade:
 
 ```json
 {
   "status": "completed",
+  "artifact_url": "https://54-162-84-165.sslip.io/videos/file.mp4",
+  "artifactUrl": "https://54-162-84-165.sslip.io/videos/file.mp4",
+  "content_type": "video/mp4",
+  "contentType": "video/mp4",
   "video_path": "/local/path/output.mp4",
   "video_url": "https://54-162-84-165.sslip.io/videos/file.mp4",
   "videoUrl": "https://54-162-84-165.sslip.io/videos/file.mp4",
@@ -111,7 +115,7 @@ Todo job de video concluido deve mandar o maximo de metadata possivel:
 }
 ```
 
-O Hub deve preferir `video_url` ou `videoUrl` para download/playback publico. `video_path` sozinho pode ser path local do Engine e nao deve ser assumido como publico.
+O Hub deve preferir `artifact_url` ou `artifactUrl` para jobs genericos. Para videos, pode usar `video_url` ou `videoUrl`. `video_path` sozinho pode ser path local do Engine e nao deve ser assumido como publico.
 
 ## Comandos que o Hub Pode Enviar ao Engine
 
@@ -191,7 +195,7 @@ Mas para o MVP novo, prefira jobs formais do Hub ou `run_recipe`.
 
 ## Capabilities Atuais do Engine
 
-O runtime manifest mostrou 15 capabilities:
+O runtime manifest atual deve mostrar 19 capabilities:
 
 ```text
 agent.output_forget
@@ -207,6 +211,10 @@ integration.videolm_health
 integration.videolm_manifest
 production.notebooklm_poll
 production.notebooklm_submit
+production.factory_infographic_assets_poll
+production.factory_infographic_assets_submit
+production.studio_artifact_poll
+production.studio_artifact_submit
 production.video_render
 system.status
 ```
@@ -277,6 +285,22 @@ system.status
 `production.notebooklm_poll`
 
 - consulta projectId NotebookLM e resolve URL publica.
+
+`production.studio_artifact_submit`
+
+- submete artifact generico do VideoLM Studio, como video, audio, infographic, report, quiz, flashcards, mindmap, slides ou data-table.
+
+`production.studio_artifact_poll`
+
+- consulta o artifact generico e normaliza a URL final em `artifact_url`.
+
+`production.factory_infographic_assets_submit`
+
+- cria assets visuais/infographic PNG do Factory para usar diretamente como artifact ou como cenas de video.
+
+`production.factory_infographic_assets_poll`
+
+- consulta jobs de assets Factory e normaliza URLs publicas.
 
 ## Recipes Atuais
 
@@ -431,6 +455,9 @@ platform
 timestamp
 capabilities_count
 capabilities
+runtime_manifest
+artifactTypes
+artifact_types
 recipes
 recent_runtime_events
 recent_command_results
@@ -443,7 +470,7 @@ renders_count
 engine_active
 ```
 
-O dashboard pode usar isso para renderizar uma tela terminal sem hardcode.
+`capabilities_count` deve estar em 19 quando o worker estiver no commit atualizado. `artifactTypes`/`artifact_types` aparecem quando `VIDEOLM_URL` estiver configurado e `GET /api/engine/manifest` expuser o contrato de artifacts. O dashboard pode usar isso para renderizar uma tela terminal sem hardcode e para jobs que nao sao MP4.
 
 ## Dashboard Terminal Sugerido no Hub
 
@@ -457,7 +484,8 @@ engine: videolm-engine-1
 hub: connected
 videolm: online
 queue: 1 render lane
-capabilities: 15
+capabilities: 19
+artifact-types: video infographic slides report
 recipes: 2
 
 $ homes-engine capabilities
@@ -467,6 +495,8 @@ agent.output_list
 system.status
 production.video_render
 production.notebooklm_submit
+production.studio_artifact_submit
+production.factory_infographic_assets_submit
 
 $ homes-engine run engine_smoke
 demo_url: https://54-162-84-165.sslip.io/engine-demo
@@ -481,21 +511,27 @@ Nao precisa parecer SaaS dashboard. O valor visual e parecer um terminal vivo co
 ## Criterios de Aceite para o Hub
 
 1. Hub recebe telemetria com capabilities e recipes.
-2. `get_engine_health` mostra Engine conectado.
-3. `run_engine_capability(system.status)` retorna completed.
-4. `run_engine_recipe(engine_smoke)` retorna completed.
-5. `list_engine_outputs` mostra pelo menos o MP4 validado:
+2. Hub recebe `runtime_manifest` completo e `capabilities_count=19`.
+3. MCP `get_engine_capabilities` lista as 19 capabilities, incluindo as quatro de artifacts genericos.
+4. `get_engine_health` mostra Engine conectado.
+5. `run_engine_capability(system.status)` retorna completed.
+6. `run_engine_capability(production.studio_artifact_submit)` ou `production.factory_infographic_assets_submit` cria um job real.
+7. Job concluido reporta `artifact_url`, `artifactUrl`, `content_type` e `contentType`.
+8. Para video, job concluido tambem reporta `video_url` e `videoUrl`.
+9. Hub dashboard mostra o artifact como downloadable quando a URL publica existe.
+10. `run_engine_recipe(engine_smoke)` retorna completed.
+11. `list_engine_outputs` mostra pelo menos o MP4 validado:
    `https://54-162-84-165.sslip.io/videos/terminal_dash_1777670483_1777670483410.mp4`
-6. Jobs novos que completam devem ter `video_url` publico, nao apenas `video_path`.
-7. O dashboard nao deve mostrar download quando o job so tem path local.
-8. O dashboard deve distinguir:
+12. Jobs novos que completam devem ter URL publica, nao apenas path local.
+13. O dashboard nao deve mostrar download quando o job so tem path local.
+14. O dashboard deve distinguir:
    - pending;
    - processing;
    - completed com public URL;
    - completed sem public URL;
    - error.
-9. MCP deve expor pelo menos as tools de job + health + outputs + runtime manifest.
-10. Comando remoto deve registrar resultado em `recent_command_results`.
+15. MCP deve expor pelo menos as tools de job + health + outputs + runtime manifest.
+16. Comando remoto deve registrar resultado em `recent_command_results`.
 
 ## Problemas Encontrados nos Testes
 
@@ -516,10 +552,10 @@ O Hub nao deve assumir que URLs antigas continuam existindo. Sempre validar arti
 
 ## Resultado dos Testes Locais
 
-Testado em 2026-05-01:
+Testado em 2026-05-03:
 
 ```text
-105 passed
+115 passed
 ```
 
 Fluxos testados:

@@ -19,6 +19,10 @@ def test_default_registry_lists_production_capabilities_without_experimental():
     assert "integration.videolm_health" in ids
     assert "production.video_render" in ids
     assert "production.notebooklm_poll" in ids
+    assert "production.studio_artifact_submit" in ids
+    assert "production.studio_artifact_poll" in ids
+    assert "production.factory_infographic_assets_submit" in ids
+    assert "production.factory_infographic_assets_poll" in ids
     assert "system.status" in ids
     assert "agent.module_run" not in ids
 
@@ -143,3 +147,39 @@ def test_video_render_capability_uses_existing_renderer(monkeypatch, tmp_path):
     assert result["status"] == "completed"
     assert result["output_path"] == "output/renders/demo.mp4"
     assert state.recent_events()[0]["event_type"] == "capability.completed"
+
+
+def test_studio_artifact_submit_capability(monkeypatch, tmp_path):
+    state = StateStore(str(tmp_path / "state.sqlite"))
+    context = CapabilityContext(profile=load_profile("default"), state=state)
+    monkeypatch.setattr(
+        default_capabilities,
+        "submit_studio_artifact",
+        lambda **kwargs: {"status": "submitted", "artifact_type": kwargs["artifact_type"]},
+    )
+
+    result = run_capability(
+        "production.studio_artifact_submit",
+        {"project_id": "studio1", "artifact_type": "infographic"},
+        context=context,
+    )
+
+    assert result == {"status": "submitted", "artifact_type": "infographic"}
+
+
+def test_studio_artifact_poll_capability(monkeypatch):
+    context = CapabilityContext(profile=load_profile("default"))
+    monkeypatch.setattr(
+        default_capabilities,
+        "poll_studio_artifact",
+        lambda project_id, artifact_type="": {"status": "completed", "project_id": project_id, "artifact_type": artifact_type},
+    )
+
+    result = run_capability(
+        "production.studio_artifact_poll",
+        {"project_id": "studio1", "artifact_type": "infographic"},
+        context=context,
+    )
+
+    assert result["status"] == "completed"
+    assert result["artifact_type"] == "infographic"

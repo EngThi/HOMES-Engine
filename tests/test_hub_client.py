@@ -73,6 +73,10 @@ def test_report_job_done_includes_public_video_url_from_sidecar(monkeypatch, tmp
     assert hub_client.report_job_done("job1", str(video_path))
     payload = json.loads(calls["data"].decode())
     assert payload["video_path"] == str(video_path)
+    assert payload["artifact_url"] == "https://54-162-84-165.sslip.io/videos/job1.mp4"
+    assert payload["artifactUrl"] == "https://54-162-84-165.sslip.io/videos/job1.mp4"
+    assert payload["content_type"] == "video/mp4"
+    assert payload["contentType"] == "video/mp4"
     assert payload["video_url"] == "https://54-162-84-165.sslip.io/videos/job1.mp4"
     assert payload["videoUrl"] == "https://54-162-84-165.sslip.io/videos/job1.mp4"
 
@@ -117,6 +121,34 @@ def test_report_job_done_includes_video_metadata(monkeypatch, tmp_path):
     assert payload["codec"] == "h264"
 
 
+def test_report_artifact_done_includes_generic_fields(monkeypatch):
+    calls = {}
+
+    def fake_post(url, data, headers, timeout):
+        calls.update({"url": url, "data": data, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr(hub_client, "HUB_BASE", "https://homes.chefthi.hackclub.app")
+    monkeypatch.setattr(hub_client.requests, "post", fake_post)
+
+    assert hub_client.report_artifact_done(
+        "job1",
+        artifact_url="https://54-162-84-165.sslip.io/artifacts/info.png",
+        artifact_type="infographic",
+        content_type="image/png",
+        metadata={"size_bytes": 123456},
+    )
+    payload = json.loads(calls["data"].decode())
+    assert payload["artifact_type"] == "infographic"
+    assert payload["artifactType"] == "infographic"
+    assert payload["artifact_url"] == "https://54-162-84-165.sslip.io/artifacts/info.png"
+    assert payload["artifactUrl"] == "https://54-162-84-165.sslip.io/artifacts/info.png"
+    assert payload["content_type"] == "image/png"
+    assert payload["contentType"] == "image/png"
+    assert payload["size_bytes"] == 123456
+    assert "video_url" not in payload
+
+
 def test_parse_fps_handles_fractional_rates():
     assert hub_client._parse_fps("30000/1001") == 29.97
     assert hub_client._parse_fps("30/1") == 30
@@ -150,9 +182,45 @@ def test_push_telemetry_includes_capability_catalog(monkeypatch):
 
     assert hub_client.push_telemetry()
     payload = json.loads(calls["data"].decode())
-    assert payload["capabilities_count"] >= 1
+    assert payload["capabilities_count"] == 19
     assert any(item["id"] == "production.video_render" for item in payload["capabilities"])
+    assert any(item["id"] == "production.studio_artifact_submit" for item in payload["capabilities"])
+    assert any(item["id"] == "production.studio_artifact_poll" for item in payload["capabilities"])
+    assert any(item["id"] == "production.factory_infographic_assets_submit" for item in payload["capabilities"])
+    assert any(item["id"] == "production.factory_infographic_assets_poll" for item in payload["capabilities"])
     assert any(item["id"] == "engine_smoke" for item in payload["recipes"])
+    assert payload["runtime_manifest"]["capabilities_count"] == 19
+    assert any(
+        item["id"] == "production.factory_infographic_assets_poll"
+        for item in payload["runtime_manifest"]["capabilities"]
+    )
+
+
+def test_push_telemetry_includes_videolm_artifact_types(monkeypatch):
+    calls = {}
+
+    def fake_post(url, data, headers, timeout):
+        calls.update({"url": url, "data": data, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    def fake_manifest(timeout):
+        return {
+            "artifactTypes": {
+                "video": {"contentTypes": ["video/mp4"]},
+                "infographic": {"contentTypes": ["image/png"]},
+            }
+        }
+
+    monkeypatch.setattr(hub_client, "HUB_BASE", "https://homes.chefthi.hackclub.app")
+    monkeypatch.setattr(hub_client.requests, "post", fake_post)
+    monkeypatch.setenv("VIDEOLM_URL", "https://54-162-84-165.sslip.io")
+    monkeypatch.setattr("core.videolm_client.fetch_engine_manifest", fake_manifest)
+    monkeypatch.setattr(hub_client, "_VIDEOLM_ARTIFACT_TYPES_CACHE", None)
+
+    assert hub_client.push_telemetry()
+    payload = json.loads(calls["data"].decode())
+    assert payload["artifactTypes"]["video"]["contentTypes"] == ["video/mp4"]
+    assert payload["artifact_types"]["infographic"]["contentTypes"] == ["image/png"]
 
 
 def test_push_telemetry_includes_recent_runtime_events(monkeypatch, tmp_path):
