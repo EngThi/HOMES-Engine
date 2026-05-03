@@ -358,6 +358,13 @@ def test_execute_command_remembers_unknown_command():
     assert hub_client.COMMAND_RESULTS[-1]["result"]["error"] == "unknown command: does_not_exist"
 
 
+def test_execute_command_accepts_notify():
+    result = hub_client.execute_command({"command": "notify", "args": ["HOMES dashboard test"]})
+
+    assert result == {"status": "completed", "message": "HOMES dashboard test"}
+    assert hub_client.COMMAND_RESULTS[-1]["command"] == "notify"
+
+
 def test_push_telemetry_includes_recent_command_results(monkeypatch):
     calls = {}
 

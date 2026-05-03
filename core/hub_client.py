@@ -491,6 +491,11 @@ def execute_command(cmd_obj: dict):
             pass
         return _remember_command_result(cmd, {"status": "completed", "message": msg})
 
+    elif cmd == "notify":
+        message = _command_message(args)
+        logger.info(f"[NOTIFY] {message}")
+        return _remember_command_result(cmd, {"status": "completed", "message": message})
+
     elif cmd == "status":
         push_telemetry()
         return _remember_command_result(cmd, {"status": "completed"})
@@ -593,6 +598,14 @@ def _recipe_payload(cmd_obj: dict) -> dict:
     elif len(args) > 1:
         payload["inputs"] = {"value": args[1:]}
     return payload
+
+
+def _command_message(args: list | dict | str) -> str:
+    if isinstance(args, str):
+        return args
+    if isinstance(args, dict):
+        return str(args.get("message") or args.get("text") or args)
+    return " ".join(str(item) for item in (args or []))
 
 
 def _remember_command_result(command: str, result: dict) -> dict:
