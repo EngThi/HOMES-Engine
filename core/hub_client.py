@@ -359,6 +359,15 @@ def _get_local_telemetry() -> dict:
     if artifact_types:
         telemetry["artifactTypes"] = artifact_types
         telemetry["artifact_types"] = artifact_types
+        runtime_manifest = telemetry.get("runtime_manifest")
+        if isinstance(runtime_manifest, dict):
+            runtime_manifest["artifactTypes"] = artifact_types
+            runtime_manifest["artifact_types"] = artifact_types
+            runtime_manifest["videolm"] = {
+                **(runtime_manifest.get("videolm") or {}),
+                "artifactTypes": artifact_types,
+                "artifact_types": artifact_types,
+            }
     try:
         from core.runtime import StateStore
 
