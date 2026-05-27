@@ -1,8 +1,13 @@
 import os
 import struct
 import logging
-from google import genai
-from google.genai import types
+
+try:
+    from google import genai
+    from google.genai import types
+except Exception:
+    genai = None
+    types = None
 
 logger = logging.getLogger(__name__)
 from core.key_utils import get_gemini_keys
@@ -54,6 +59,10 @@ class GeminiTTS:
 
     def generate(self, text, output_path, voice="Zephyr"):
         """Gera áudio com Key Rotation e modelo v2.5 Flash TTS."""
+        if genai is None or types is None:
+            logger.warning("Google GenAI SDK indisponível. Usando fallback TTS externo quando configurado.")
+            return False
+
         if not self.api_keys:
             logger.error("Nenhuma GEMINI_API_KEY disponível!")
             return False
@@ -86,6 +95,10 @@ class GeminiTTS:
 
     def generate_multi_speaker(self, dialogue, output_path, speakers_config=None):
         """Gera diálogo TTS com múltiplas vozes usando speaker labels."""
+        if genai is None or types is None:
+            logger.warning("Google GenAI SDK indisponível. Usando fallback TTS externo quando configurado.")
+            return False
+
         if not self.api_keys:
             logger.error("Nenhuma GEMINI_API_KEY disponível!")
             return False

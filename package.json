@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "test:smoke": "node tests/playwright_smoke.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.44.0"
+  }
+}

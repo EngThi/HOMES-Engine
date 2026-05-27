@@ -2,8 +2,12 @@ import json
 import os
 import logging
 from . import register
-from google import genai
 from dotenv import load_dotenv
+
+try:
+    from google import genai
+except Exception:
+    genai = None
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +23,9 @@ def load_metrics():
 @register("rev_ops")
 def run(args: list) -> dict:
     load_dotenv()
+    if genai is None:
+        return {"module": "rev_ops", "status": "unavailable", "error": "Google GenAI SDK is not installed."}
+
     data = load_metrics()
     
     revenue = (data["monthly_views"] / 1000) * data["avg_cpm"]

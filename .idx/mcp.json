@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "homes": {
+      "url": "https://homes.chefthi.hackclub.app/mcp",
+      "headers": {
+        "Authorization": "Bearer e4d56b59ec26df44ced71ed49b6b2e8f361f591100668e12"
+      }
+    }
+  }
+}

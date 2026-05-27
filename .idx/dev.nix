@@ -4,23 +4,15 @@
   packages = [
     # pkgs.rustup # Temporarily disabled due to build failure
     # pkgs.gcc
-    pkgs.python3
+    pkgs.nodejs_20
+    pkgs.python311
     pkgs.python311Packages.pip
     pkgs.python311Packages.virtualenv
-    pkgs.python311Packages.requests
-    pkgs.python311Packages.python-dotenv
-    pkgs.python311Packages.pytest
-    pkgs.python311Packages.edge-tts
     pkgs.ffmpeg
-    pkgs.stdenv.cc.cc.lib
-    pkgs.libGL
-    pkgs.xorg.libX11
+    pkgs.curl
+    pkgs.jq
     pkgs.openssh
   ];
-
-  env = {
-    LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib:${pkgs.libGL}/lib:${pkgs.xorg.libX11}/lib";
-  };
 
   idx = {
     extensions = [

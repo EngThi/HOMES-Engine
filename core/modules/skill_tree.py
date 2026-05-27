@@ -2,8 +2,13 @@ import json
 import os
 import logging
 from . import register
-from google import genai
-from google.genai import types
+
+try:
+    from google import genai
+    from google.genai import types
+except Exception:
+    genai = None
+    types = None
 
 logger = logging.getLogger(__name__)
 STATE_FILE = "output/skills_state.json"
@@ -29,6 +34,9 @@ def run(args: list) -> dict:
 
     elif cmd == "quest":
         # Gemini analisa seu nível atual e gera uma tarefa
+        if genai is None:
+            return {"status": "unavailable", "message": "Google GenAI SDK is not installed."}
+
         from dotenv import load_dotenv
         load_dotenv()
         keys = get_gemini_keys()

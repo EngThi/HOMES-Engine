@@ -3,8 +3,13 @@ import sys
 import logging
 import random
 from typing import Optional
-from google import genai
-from google.genai import types
+
+try:
+    from google import genai
+    from google.genai import types
+except Exception:
+    genai = None
+    types = None
 
 # Injetar a raiz do projeto no path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,11 +26,16 @@ class AIWriter:
         self.model_id = "gemini-3-flash-preview"
 
     def get_client(self):
+        if genai is None:
+            return None
         if not self.api_keys: return None
         return genai.Client(api_key=self.api_keys[self.current_idx])
 
     def generate_script(self, topic: str, style_prompt: str = "", duration_target: str = "medium") -> Optional[str]:
         """Gera roteiro profissional usando Gemini 3 com Thinking e Search."""
+        if genai is None or types is None:
+            logger.warning("Google GenAI SDK indisponível; AIWriter retornará None.")
+            return None
         
         duration_map = {
             "short":  ("60 to 90 seconds", "1 to 2 dense paragraphs"),

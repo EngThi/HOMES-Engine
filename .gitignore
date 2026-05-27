@@ -1,6 +1,7 @@
 # System & Python
 __pycache__/
 *.pyc
+node_modules/
 *.log
 .DS_Store
 
@@ -20,6 +21,7 @@ scripts/*.txt
 # Environment & Secrets
 .env
 .secrets
+*.pem
 .wakatime-project
 .wakatime.cfg
 
@@ -31,3 +33,7 @@ queue/cmd_*.txt
 
 # Private Tools & Management
 TESTES/
+tmp_remote/
+Screenshot_*.jpg
+PRIVATE/
+backups/

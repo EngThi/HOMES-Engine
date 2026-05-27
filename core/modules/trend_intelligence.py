@@ -5,8 +5,13 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+
+try:
+    from google import genai
+    from google.genai import types
+except Exception:
+    genai = None
+    types = None
 from . import register
 
 load_dotenv()
@@ -20,6 +25,10 @@ class TrendModel:
         self.current_idx = 0
 
     def ask(self, prompt: str):
+        if genai is None or types is None:
+            logger.warning("Google GenAI SDK indisponível; TrendModel retornará None.")
+            return None
+
         for _ in range(len(self.keys)):
             try:
                 client = genai.Client(api_key=self.keys[self.current_idx])
