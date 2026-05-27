@@ -77,8 +77,11 @@ def process_hub_job(job: dict) -> bool:
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
     script_path = os.path.join(SCRIPTS_DIR, f"job_{job_id}.txt")
 
-    # Se o Hub não mandou script pronto, cria um roteiro curto centrado no tema.
-    content = script if script.strip() else _script_from_job(topic, params, theme)
+    # Build enough narration for reviewer-facing jobs; avoid 15s smoke renders unless explicitly requested.
+    target_seconds = int(params.get("target_duration_seconds") or 60)
+    content = script.strip() if script.strip() else _script_from_job(topic, params, theme)
+    if target_seconds >= 55 and len(content.split()) < 120:
+        content = (content + "\n\n" + _script_from_job(topic, {**params, "target_duration_seconds": target_seconds}, theme)).strip()
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(content)
 
@@ -121,7 +124,7 @@ def _job_text(job: dict, params: dict, *keys: str, default: str = "") -> str:
 
 
 def _script_from_job(topic: str, params: dict, theme: str = "") -> str:
-    target = int(params.get("target_duration_seconds") or 30)
+    target = int(params.get("target_duration_seconds") or 60)
     language = params.get("language") or "en-US"
     angle = params.get("angle") or params.get("description") or params.get("summary") or ""
     audience = params.get("audience") or "reviewers"

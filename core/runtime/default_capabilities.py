@@ -95,11 +95,26 @@ def build_default_registry() -> CapabilityRegistry:
         )
     )
     def runtime_manifest(context: CapabilityContext, args: Dict[str, Any]) -> Dict[str, Any]:
-        return build_runtime_manifest(
+        manifest = build_runtime_manifest(
             registry,
             profile=context.profile,
             include_experimental=bool(args.get("include_experimental", True)),
         )
+        if args.get("include_videolm", True):
+            try:
+                videolm_manifest = fetch_engine_manifest(timeout=int(args.get("videolm_timeout", 2)))
+                artifact_types = videolm_manifest.get("artifactTypes") or videolm_manifest.get("artifact_types") or {}
+                manifest["videolm"] = {
+                    "baseUrl": videolm_manifest.get("baseUrl") or videolm_manifest.get("base_url"),
+                    "capabilities": videolm_manifest.get("capabilities", {}),
+                    "artifactTypes": artifact_types,
+                    "artifact_types": artifact_types,
+                }
+                manifest["artifactTypes"] = artifact_types
+                manifest["artifact_types"] = artifact_types
+            except Exception as exc:
+                manifest["videolm"] = {"status": "unavailable", "error": str(exc)}
+        return manifest
 
     @registry.register(
         CapabilitySpec(
